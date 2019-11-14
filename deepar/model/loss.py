@@ -35,14 +35,12 @@ def unscale(mu, scale, scale_keys, hash_table):
 class GaussianLogLikelihood(Loss):
     """
     Custom GaussianLogLikelihood loss function
-      :param scale_values: mapping of keys to scale values (for unscaling)
       :param mask_value: value in y_true that should be masked in loss (missing tgt in training set)
       :param name:
     """
-    def __init__(self, scale_values, mask_value = -10000, name='gaussian_log_likelihood'):
+    def __init__(self, mask_value = -10000, name='gaussian_log_likelihood'):
         
         super(GaussianLogLikelihood, self).__init__(reduction=Reduction.AUTO, name = name)
-        self.table = build_tf_lookup(scale_values)
         self.mask_value = mask_value
 
     def _mask_loss(self, loss_term, y_true, mask_value):
@@ -62,13 +60,9 @@ class GaussianLogLikelihood(Loss):
         return: loss (mask, scaling inversed)
         """
 
-        mu_pred, sigma_pred, scale_keys = y_pred_bundle
-        sigma_pred = softplus(sigma_pred)
+        mu, sigma = y_pred_bundle
         batch_size = mu_pred.shape[0] 
-
-        # unscale
-        mu, sigma = unscale(mu_pred, sigma_pred, scale_keys, self.table)
-
+        
         # loss
         loss_term = 0.5*tf.math.log(sigma) + 0.5*tf.divide(tf.square(y_true - mu), sigma)
         
@@ -82,13 +76,11 @@ class GaussianLogLikelihood(Loss):
 class NegativeBinomialLogLikelihood(Loss):
     """
     Custom NegativeBinomialLogLikelihood loss function
-      :param scale_values: mapping of keys to scale values (for unscaling)
       :param mask_value: value in y_true that should be masked in loss (missing tgt in training set)
     """
-    def __init__(self, scale_values, mask_value = -10000, name='negative_binomial_log_likelihood'):
+    def __init__(self, mask_value = -10000, name='negative_binomial_log_likelihood'):
         
         super(NegativeBinomialLogLikelihood, self).__init__(reduction=Reduction.AUTO, name = name)
-        self.table = build_tf_lookup(scale_values)
         self.mask_value = mask_value
 
     def _mask_loss(self, loss_term, y_true, mask_value):
@@ -107,13 +99,8 @@ class NegativeBinomialLogLikelihood(Loss):
         return: loss (mask, scaling inversed)
         """
 
-        mu_pred, alpha_pred, scale_keys = y_pred_bundle
+        mu, alpha = y_pred_bundle
         batch_size = mu_pred.shape[0] 
-        alpha_pred = softplus(alpha_pred)
-        mu_pred = softplus(mu_pred)
-
-        # unscale
-        mu, alpha = unscale(mu_pred, alpha_pred, scale_keys, self.table)
 
         # loss
         alpha_y_pred = tf.multiply(alpha, mu)

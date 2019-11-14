@@ -16,6 +16,7 @@ import logging
 import numpy as np
 import os
 import time
+import sys
 
 class DeepARLearner:
     def __init__(self, ts_obj, output_dim = 1, emb_dim = 128, lstm_dim = 128, dropout = 0.1, 
@@ -139,6 +140,9 @@ class DeepARLearner:
         # set up early stopping callback
         EarlyStopping(patience = stopping_patience, active = early_stopping)
 
+        # setup table for unscaling
+        lookup_table = build_tf_lookup(self.ts_obj.target_means)
+
         # Iterate over epochs.
         for epoch in range(epochs):
             self.logger.info(f'Start of epoch {epoch}')
@@ -148,7 +152,13 @@ class DeepARLearner:
                 # compute loss
                 with tf.GradientTape(persistent = True) as tape:
                     preds = self.model(x_batch_train, training = True) 
-                    preds.append(cat_labels)
+                    
+                    # softplus parameters 
+                    scale = softplus(preds[1])
+                    if self.ts_obj.count_data:
+                        mu = softplus(preds[0])
+
+                    mu, scale = unscale(mu, scale, cat_labels, lookup_table)
                     loss_value = self.loss_fn(y_batch_train, preds)
                 
                 # sgd
@@ -176,20 +186,22 @@ class DeepARLearner:
                     
                     # compute loss, doesn't need to be persistent bc not updating weights
                     with tf.GradientTape() as tape:
-                        
+
                         # treat as training -> reset lstm states inbetween each batch
                         preds = self.model(x_batch_val, training = True) 
-                        preds.append(cat_labels)
+
+                        # softplus parameters 
+                        scale = softplus(preds[1])
+                        if self.ts_obj.count_data:
+                            mu = softplus(preds[0])
+
+                        mu, scale = unscale(mu, scale, cat_labels, lookup_table)
                         loss_value = self.loss_fn(y_batch_val, preds)
 
                     # log validation metrics (avg loss, avg MAE, avg RMSE)
                     eval_mae(y_batch_val, preds[0])
                     eval_rmse(y_batch_val, preds[0])
                     eval_loss_avg(loss_value)
-                    eval_mae_avg(eval_mae.result())
-                    eval_rmse_avg(eval_rmse.result())
-                    eval_mae.reset_states()
-                    eval_rmse.reset_states()
                     if batch == batches:
                         break
 
@@ -206,8 +218,8 @@ class DeepARLearner:
 
                 # reset metric states
                 eval_loss_avg.reset_states()
-                eval_mae_avg.reset_states()
-                eval_rmse_avg.reset_states()
+                eval_mae.reset_states()
+                eval_rmse.reset_states()
             else:
                 EarlyStopping(epoch_loss_avg.result())
 
