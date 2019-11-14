@@ -45,7 +45,7 @@ class GaussianLogLikelihood(Loss):
         self.table = build_tf_lookup(scale_values)
         self.mask_value = mask_value
 
-    def _mask_loss(loss_term, y_true, mask_value):
+    def _mask_loss(self, loss_term, y_true, mask_value):
         """
         util function
             mask loss tensor (y_true) according to mask_value locations
@@ -73,7 +73,7 @@ class GaussianLogLikelihood(Loss):
         loss_term = 0.5*tf.math.log(sigma) + 0.5*tf.divide(tf.square(y_true - mu), sigma)
         
         # mask
-        masked_loss_term = _mask_loss(loss_term, y_true, self.mask_value)
+        masked_loss_term = self._mask_loss(loss_term, y_true, self.mask_value)
 
         # divide by batch size bc auto reduction will sum over batch size
         return (masked_loss_term + 1e-6 + 6) / batch_size
@@ -91,7 +91,7 @@ class NegativeBinomialLogLikelihood(Loss):
         self.table = build_tf_lookup(scale_values)
         self.mask_value = mask_value
 
-    def _mask_loss(loss_term, y_true, mask_value):
+    def _mask_loss(self, loss_term, y_true, mask_value):
         """
         util function
             mask loss tensor (y_true) according to mask_value locations
@@ -126,7 +126,7 @@ class NegativeBinomialLogLikelihood(Loss):
         loss_term = -loss_term
 
         # mask
-        masked_loss_term = _mask_loss(loss_term, y_true, self.mask_value)
+        masked_loss_term = self._mask_loss(loss_term, y_true, self.mask_value)
 
         # divide by batch size bc auto reduction will sum over batch size
         return (masked_loss_term + 1e-6 + 6) / batch_size
