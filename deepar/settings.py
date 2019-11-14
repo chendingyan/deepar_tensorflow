@@ -1,6 +1,8 @@
 import logging.config
 import os
 
+# logging configuration from https://github.com/arrigonialberto86/deepar
+
 LOG_CONF = {
     'version': 1,
     'disable_existing_loggers': False,

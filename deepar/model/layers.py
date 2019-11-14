@@ -1,42 +1,63 @@
-from keras import backend as K
-from keras.initializers import glorot_normal
-from keras.layers import Layer
+import tensorflow as tf
+from tensorflow.keras.layers import LSTM, Layer
+from tensorflow.keras.activations import softplus
 
+class LSTMResetStateful(LSTM):
+
+    def __init__(self, *args, **kwargs):
+        super(LSTMResetStateful, self).__init__(*args, **kwargs)
+
+    def build(self, *args, **kwargs):
+        super(LSTMResetStateful, self).build(*args, **kwargs)
+
+    def call(self, inputs, mask = None, training = None):
+        
+        #reset stateful lstm during training
+        if training:
+            self.reset_states()
+            self.reset_dropout_mask()
+            self.reset_recurrent_dropout_mask()
+        
+        return super(LSTMResetStateful, self).call(inputs, mask = mask, training = training)
 
 class GaussianLayer(Layer):
-    def __init__(self, output_dim, **kwargs):
+    """
+        from https://github.com/arrigonialberto86/deepar, learns mu and scale outputs in single layer
+    """
+
+    def __init__(self, output_dim = 1, count_data = False, **kwargs):
         self.output_dim = output_dim
+        self.count_data = count_data
         self.kernel_1, self.kernel_2, self.bias_1, self.bias_2 = [], [], [], []
         super(GaussianLayer, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        n_weight_rows = input_shape[2]
+        features = input_shape[2]
         self.kernel_1 = self.add_weight(name='kernel_1',
-                                        shape=(n_weight_rows, self.output_dim),
-                                        initializer=glorot_normal(),
+                                        shape=(features, self.output_dim),
+                                        initializer='glorot_normal',
                                         trainable=True)
         self.kernel_2 = self.add_weight(name='kernel_2',
-                                        shape=(n_weight_rows, self.output_dim),
-                                        initializer=glorot_normal(),
+                                        shape=(features, self.output_dim),
+                                        initializer='glorot_normal',
                                         trainable=True)
         self.bias_1 = self.add_weight(name='bias_1',
                                       shape=(self.output_dim,),
-                                      initializer=glorot_normal(),
+                                      initializer='glorot_normal',
                                       trainable=True)
         self.bias_2 = self.add_weight(name='bias_2',
                                       shape=(self.output_dim,),
-                                      initializer=glorot_normal(),
+                                      initializer='glorot_normal',
                                       trainable=True)
         super(GaussianLayer, self).build(input_shape)
 
     def call(self, x):
-        output_mu = K.dot(x, self.kernel_1) + self.bias_1
-        output_sig = K.dot(x, self.kernel_2) + self.bias_2
-        output_sig_pos = K.log(1 + K.exp(output_sig)) + 1e-06
-        return [output_mu, output_sig_pos]
+        output_mu = tf.matmul(x, self.kernel_1) + self.bias_1
+        output_sig = tf.matmul(x, self.kernel_2) + self.bias_2
+        output_sig = softplus(output_sig)
+        if self.count_data:
+            output_mu = softplus(output_mu)
+        return [output_mu, output_sig]
 
     def compute_output_shape(self, input_shape):
-        """
-        The assumption is the output ts is always one-dimensional
-        """
         return [(input_shape[0], self.output_dim), (input_shape[0], self.output_dim)]

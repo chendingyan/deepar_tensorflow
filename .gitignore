@@ -1,3 +1,9 @@
+.vscode/
+.ipynb_checkpoints/
+deepar/__pycache__/
+deepar/dataset/__pycache__/
+deepar/model/__pycache__/
+
 .idea
 ipynb
 # Byte-compiled / optimized / DLL files
