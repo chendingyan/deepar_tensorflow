@@ -42,10 +42,12 @@ class DeepARLearner:
         self.train_window = train_window
         if logger is None:
             logger = logging.getLogger('deepar')
+            handler = logging.StreamHandler(sys.stdout)
+            logger.addHandler(handler)
         self.logger = logger
         assert verbose == 0 or verbose == 1, 'argument verbose must be 0 or 1'
         if verbose == 1:
-            logger.setLevel(logging.INFO)
+            self.logger.setLevel(logging.INFO)
         self.verbose = verbose
         self.scheduler = scheduler
         self.lr = lr

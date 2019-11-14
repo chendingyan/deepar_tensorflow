@@ -39,7 +39,7 @@ def _create_ts_test_object(df, train_ds, dataset):
 
 def train(working_dir, dataset = '56_sunspots', epochs = 1):
     # read in training df
-    df = pd.read_csv(f'/data/datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')#.format(dataset))
+    df = pd.read_csv(f'/data/datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')
     df = _multi_index_prep(df, dataset)
     df = _time_col_to_seconds(df, dataset)
 
@@ -54,7 +54,7 @@ def train(working_dir, dataset = '56_sunspots', epochs = 1):
         checkpoint_dir = os.path.join("./checkpoints", working_dir))
 
     # evaluate
-    test_df = pd.read_csv('/data/datasets/seed_datasets_current/{}/TEST/dataset_TEST/tables/learningData.csv'.format(dataset))
+    test_df = pd.read_csv(f'/data/datasets/seed_datasets_current/{dataset}/TEST/dataset_TEST/tables/learningData.csv')
     test_df = _multi_index_prep(test_df, dataset)
     test_df = _time_col_to_seconds(test_df, dataset)
     test_ds = _create_ts_test_object(test_df, ds, dataset)
