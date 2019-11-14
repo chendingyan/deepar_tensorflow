@@ -61,8 +61,8 @@ class GaussianLogLikelihood(Loss):
         """
 
         mu, sigma = y_pred_bundle
-        batch_size = mu_pred.shape[0] 
-        
+        batch_size = mu.shape[0] 
+
         # loss
         loss_term = 0.5*tf.math.log(sigma) + 0.5*tf.divide(tf.square(y_true - mu), sigma)
         
@@ -100,7 +100,7 @@ class NegativeBinomialLogLikelihood(Loss):
         """
 
         mu, alpha = y_pred_bundle
-        batch_size = mu_pred.shape[0] 
+        batch_size = mu.shape[0] 
 
         # loss
         alpha_y_pred = tf.multiply(alpha, mu)
