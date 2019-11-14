@@ -37,8 +37,7 @@ def _create_ts_test_object(df, train_ds, dataset):
         test_ds = TimeSeriesTest(df, train_ds, target_idx = 2, timestamp_idx = 1, index_col=0, grouping_idx = 3)
     return test_ds
 
-#def train(working_dir, dataset = '56_sunspots', epochs = 1):
-def train(dataset = '56_sunspots', epochs = 1):
+def train(working_dir, dataset = '56_sunspots', epochs = 1):
     # read in training df
     df = pd.read_csv(f'../../datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')#.format(dataset))
     df = _multi_index_prep(df, dataset)
@@ -52,8 +51,7 @@ def train(dataset = '56_sunspots', epochs = 1):
     learner.fit(epochs = epochs, 
         batches = 16, 
         early_stopping = True, 
-        checkpoint_dir = None)
-        #checkpoint_dir = os.path.join("./checkpoints", working_dir))
+        checkpoint_dir = os.path.join("./checkpoints", working_dir))
 
     # evaluate
     test_df = pd.read_csv('../../datasets/seed_datasets_current/{}/TEST/dataset_TEST/tables/learningData.csv'.format(dataset))
