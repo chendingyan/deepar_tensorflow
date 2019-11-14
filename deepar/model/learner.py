@@ -79,11 +79,9 @@ class DeepARLearner:
 
         # define loss function
         if self.ts_obj.count_data:
-            self.loss_fn = NegativeBinomialLogLikelihood(self.ts_obj.scale_factors, 
-                mask_value = self.ts_obj.mask_value)
+            self.loss_fn = NegativeBinomialLogLikelihood(mask_value = self.ts_obj.mask_value)
         else:
-            self.loss_fn = GaussianLogLikelihood(self.ts_obj.scale_factors,
-                mask_value = self.ts_obj.mask_value)
+            self.loss_fn = GaussianLogLikelihood(mask_value = self.ts_obj.mask_value)
 
     def _create_model(self, num_cats, num_features, output_dim = 1, emb_dim = 128, lstm_dim = 128, 
         batch_size = 16, dropout = 0.1, count_data = False, inference_mask = -1):
