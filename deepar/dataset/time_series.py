@@ -360,14 +360,14 @@ class TimeSeries(Dataset):
                 sampled_cat_data = self._sample_ts(pandas_df=cat_data,
                                                     desired_len=window_size,
                                                     padding_val=padding_value,
-                                                    negative_obs=self.negative_obs)
+                                                    negative_obs=self.negative_obs,
+                                                    val_set = val_set)
 
             # sample missing 'targets' from current model parameters (for 'prev_targets')
             sampled_cat_data = self._sample_missing_tgts(sampled_cat_data, model, cat, self.missing_tgt_vals, 
                 window_size, batch_size)
    
             sampled.append(sampled_cat_data)
-        
         data = pd.concat(sampled)
 
         # [cont_inputs, cat_inputs], cat_labels, targets

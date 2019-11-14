@@ -65,7 +65,7 @@ class GaussianLogLikelihood(Loss):
 
         # loss
         loss_term = 0.5*tf.math.log(sigma) + 0.5*tf.divide(tf.square(y_true - mu), sigma)
-        
+
         # mask
         masked_loss_term = self._mask_loss(loss_term, y_true, self.mask_value)
 
