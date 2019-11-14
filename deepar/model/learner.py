@@ -154,9 +154,9 @@ class DeepARLearner:
                     # softplus parameters 
                     scale = softplus(preds[1])
                     if self.ts_obj.count_data:
-                        mu = softplus(preds[0])
+                        preds[0] = softplus(preds[0])
 
-                    mu, scale = unscale(mu, scale, cat_labels, lookup_table)
+                    mu, scale = unscale(preds[0], scale, cat_labels, lookup_table)
                     loss_value = self.loss_fn(y_batch_train, preds)
                 
                 # sgd
@@ -191,9 +191,9 @@ class DeepARLearner:
                         # softplus parameters 
                         scale = softplus(preds[1])
                         if self.ts_obj.count_data:
-                            mu = softplus(preds[0])
+                            preds[0] = softplus(preds[0])
 
-                        mu, scale = unscale(mu, scale, cat_labels, lookup_table)
+                        mu, scale = unscale(preds[0], scale, cat_labels, lookup_table)
                         loss_value = self.loss_fn(y_batch_val, preds)
 
                     # log validation metrics (avg loss, avg MAE, avg RMSE)
