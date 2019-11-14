@@ -133,6 +133,8 @@ class DeepARLearner:
         eval_loss_avg = Mean()
         eval_mae = MeanAbsoluteError()
         eval_rmse = RootMeanSquaredError()
+        eval_mae_avg = Mean()
+        eval_rmse_avg = Mean()
 
         # set up early stopping callback
         EarlyStopping(patience = stopping_patience, active = early_stopping)
@@ -177,27 +179,35 @@ class DeepARLearner:
                         
                         # treat as training -> reset lstm states inbetween each batch
                         preds = self.model(x_batch_val, training = True) 
-                        eval_mae(y_batch_val, preds[0])
-                        eval_rmse(y_batch_val, preds[0])
                         preds.append(cat_labels)
                         loss_value = self.loss_fn(y_batch_val, preds)
 
+                    # log validation metrics (avg loss, avg MAE, avg RMSE)
+                    eval_mae(y_batch_val, preds[0])
+                    eval_rmse(y_batch_val, preds[0])
                     eval_loss_avg(loss_value)
+                    eval_mae_avg(eval_mae.result())
+                    eval_rmse_avg(eval_rmse.result())
+                    eval_mae.reset_states()
+                    eval_rmse.reset_states()
                     if batch == batches:
                         break
 
+                # logging
                 self.logger.info(f'Validation took {round(time.time() - start_time, 0)}s')
                 self.logger.info(f'Epoch {epoch}: Val loss on {batches} batches: {eval_loss_avg.result()}')
-                self.logger.info(f'Epoch {epoch}: Val MAE: {eval_mae.result()}, RMSE: {eval_rmse.result()}')
+                self.logger.info(f'Epoch {epoch}: Val MAE: {eval_mae_avg.result()}, RMSE: {eval_rmse_avg.result()}')
                 tf.summary.scalar('val_loss', eval_loss_avg.result(), epoch)
-                tf.summary.scalar('val_mae', eval_mae.result(), epoch)
-                tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
-                eval_mae.reset_states()
-                eval_rmse.reset_states()
+                tf.summary.scalar('val_mae', eval_mae_avg.result(), epoch)
+                tf.summary.scalar('val_rmse', eval_rmse_avg.result(), epoch)
 
                 # early stopping
                 EarlyStopping(eval_loss_avg.result())
+
+                # reset metric states
                 eval_loss_avg.reset_states()
+                eval_mae_avg.reset_states()
+                eval_rmse_avg.reset_states()
             else:
                 EarlyStopping(epoch_loss_avg.result())
 

@@ -232,12 +232,13 @@ class TimeSeries(Dataset):
 
         return pd.concat([padding_df, pandas_df]).reset_index(drop=True)
 
-    def _sample_ts(self, pandas_df, desired_len, padding_val = 0, negative_obs = 1):
+    def _sample_ts(self, pandas_df, desired_len, padding_val = 0, negative_obs = 1, val_set = False):
         """
             :param pandas_df: input pandas df with 'target' columns e features
             :param desired_len: desired sample length (number of rows)
             :param padding_val: default is 0
             :param negative_obs: how far before beginning of time series is it possible to set t
+            :param val_set: whether we are sampling from train or validation data
             :return: a pandas df (sample)
         
         from https://github.com/arrigonialberto86/deepar
@@ -247,6 +248,9 @@ class TimeSeries(Dataset):
         if pandas_df.shape[0] == desired_len:
             return pandas_df
 
+        # do not sample negative observations in validation
+        if val_set:
+            negative_obs = 0
         start_index = np.random.choice([i for i in range(0 - negative_obs, pandas_df.shape[0] - desired_len)])
 
         # replace beginning of series with padded values to learn beginning
@@ -255,21 +259,30 @@ class TimeSeries(Dataset):
 
         return pandas_df.iloc[start_index: start_index+desired_len, ]
 
-    def _add_prev_target_col(self, df):
+    def _add_prev_target_col(self, df, train_df = None):
         """
         util function
             add column with previous target value for autoregressive modeling
         """
-        # add feature column for previous output value (z_{t-1})
+
         df = df.reset_index(drop=True)
-        df.loc[:,'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
+        if train_df is None:
 
-        # scale
-        df.loc[:, 'prev_target'] = \
-            df['prev_target'] / self.target_means[df[self.grouping_name]].reset_index(drop = True)
+            # add feature column for previous output value (z_{t-1})
+            df.loc[:,'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
 
-        # interpolate (will only replace NA rows (first time))
-        df.loc[:,'prev_target'] = df['prev_target'].interpolate()
+            # scale
+            df.loc[:, 'prev_target'] = \
+                df['prev_target'] / self.target_means[df[self.grouping_name]].reset_index(drop = True)
+
+            # interpolate (will only replace NA rows (first time))
+            df.loc[:,'prev_target'] = df['prev_target'].interpolate()
+
+        else:
+            df.loc[:, 'prev_target'] = \
+                train_df['target'].tail(1).repeat(repeats = df.shape[0]).reset_index(drop = True)
+            df.loc[:, 'prev_target'] = \
+                df['prev_target'] / self.target_means[df[self.grouping_name]].reset_index(drop = True)
 
         # replace target missing rows with mask
         df.loc[:, 'target'] = df['target'].fillna(self.mask_value)
@@ -332,7 +345,10 @@ class TimeSeries(Dataset):
             cat_data = data[data[self.grouping_name] == cat]
 
             # add 'prev_target' column for this category
-            cat_data = self._add_prev_target_col(cat_data)
+            if val_set:
+                cat_data = self._add_prev_target_col(cat_data, self.train_data)
+            else:
+                cat_data = self._add_prev_target_col(cat_data)
 
             # Initial padding for each selected time series to reach window_size
             if cat_data.shape[0] < window_size:
