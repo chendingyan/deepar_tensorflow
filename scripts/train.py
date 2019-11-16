@@ -72,7 +72,7 @@ def train(working_dir, dataset = '56_sunspots', epochs = 100, stopping_patience 
     # scores = pd.read_csv('../datasets/seed_datasets_current/56_sunspots/SCORE/dataset_SCORE/tables/learningData.csv')
     # rms = sqrt(mean_squared_error(scores['sunspots'], preds))
 
-def hp_search(working_dir, dataset = '56_sunspots', epochs=1, metric='eval_mae_result', stopping_patience=3):
+def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae_result', stopping_patience=3):
 
     working_dir = os.path.join("./checkpoints", working_dir)
 
@@ -130,7 +130,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=1, metric='eval_mae_r
                             final_metric = learner.fit(epochs = epochs,
                                 stopping_patience=stopping_patience,
                                 checkpoint_dir=os.path.join(working_dir, run_name))
-                                
+
                             run_num += 1
 
 if __name__ == '__main__':

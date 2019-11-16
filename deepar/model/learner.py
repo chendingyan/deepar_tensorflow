@@ -177,7 +177,7 @@ class DeepARLearner:
                     loss_value = self.loss_fn(y_batch_train, (mu, scale))
                 
                 # sgd
-                tf.summary.scalar('train_loss', loss_value, epoch * batches + batch)
+                tf.summary.scalar('train_loss', loss_value, epoch * steps_per_epoch + batch)
                 batch_loss_avg(loss_value)
                 epoch_loss_avg(loss_value)
                 grads = tape.gradient(loss_value, self.model.trainable_weights)

@@ -165,7 +165,7 @@ class TimeSeries(Dataset):
             mask missing target values in training and validation frames
         """
         # mask missing target values
-        for idx in pd.isnull(df)['target'].nonzero()[0]:
+        for idx in pd.isnull(df)['target'].to_numpy().nonzero()[0]:
             key = df[self.grouping_name][idx]
             if key in self.missing_tgt_vals.keys():
                 self.missing_tgt_vals[key].append(df['age'][idx])
