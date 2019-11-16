@@ -4,7 +4,7 @@ from tensorflow.keras.layers import Input, Dense, LSTM, Masking, Embedding, Conc
 from tensorflow.keras.models import Model
 from tensorflow.keras.activations import relu, softplus
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, LearningRateScheduler, ReduceLROnPlateau, TensorBoard
+from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler, ReduceLROnPlateau, TensorBoard
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError, Mean
 
 from deepar.model.loss import unscale, GaussianLogLikelihood, NegativeBinomialLogLikelihood, build_tf_lookup
@@ -19,8 +19,6 @@ import time
 import sys
 
 logger = logging.getLogger(__name__)
-# handler = logging.StreamHandler(sys.stdout)
-# logger.addHandler(handler)
 
 class DeepARLearner:
     def __init__(self, ts_obj, output_dim = 1, emb_dim = 128, lstm_dim = 128, dropout = 0.1, 
@@ -153,7 +151,7 @@ class DeepARLearner:
         eval_rmse = RootMeanSquaredError()
 
         # set up early stopping callback
-        EarlyStopping(patience = stopping_patience, active = early_stopping)
+        early_stopping_cb = EarlyStopping(patience = stopping_patience, active = early_stopping)
 
         # setup table for unscaling
         lookup_table = build_tf_lookup(self.ts_obj.target_means)
@@ -231,19 +229,19 @@ class DeepARLearner:
                 tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
 
                 # early stopping
-                early_stop = EarlyStopping(eval_mae_result)
+                if early_stopping_cb(eval_mae_result):
+                    break
 
                 # reset metric states
                 eval_loss_avg.reset_states()
                 eval_mae.reset_states()
                 eval_rmse.reset_states()
             else:
-                early_stop = EarlyStopping(epoch_loss_avg_result)
+                if early_stopping_cb(epoch_loss_avg_result):
+                    break
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
-            if early_stop:
-                break
         
         # return final metric
         if val_gen is not None:

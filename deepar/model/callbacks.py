@@ -23,7 +23,7 @@ class EarlyStopping(object):
         
         if not self.active:
             return False
-        if self.prev_metric is None:
+        elif self.prev_metric is None:
             self.prev_metric = cur_metric
             return False
         else:
@@ -38,10 +38,11 @@ class EarlyStopping(object):
                 else:
                     self.degrade_count = 0
             if self.degrade_count > self.patience:
-                logging.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
+                logger.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
                 return True
-            self.prev_metric = cur_metric
-            return False
+            else:
+                self.prev_metric = cur_metric
+                return False
 
     # def _callbacks(self, filepath, early_stopping = True, val_set = True, stopping_patience = 0, scheduler_factor = 0.2, 
     #         scheduler_patience = 5, min_cosine_lr = 0):

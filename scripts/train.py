@@ -6,11 +6,13 @@ import numpy as np
 from deepar.model.learner import DeepARLearner
 from sklearn.metrics import mean_squared_error
 from math import sqrt
-
+import sys
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 import logging
 logger = logging.getLogger('deepar')
+# handler = logging.StreamHandler(sys.stdout)
+# logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 def _time_col_to_seconds(df, dataset):
@@ -101,6 +103,12 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
 
     # grid search over parameters
     run_num = 0
+    total_run_count = len(HP_EMB_DIM.domain.values) * \
+        len(HP_LSTM_DIM.domain.values) * \
+        len(HP_DROPOUT.domain.values) * \
+        len(HP_LR.domain.values) * \
+        len(HP_BS.domain.values) * \
+        len(HP_WINDOW.domain.values)
     for emb_dim in HP_EMB_DIM.domain.values:
         for lstm_dim in HP_LSTM_DIM.domain.values:
             for dropout in HP_DROPOUT.domain.values:
@@ -118,7 +126,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                                 'window_size': window_size,
                             }
                             run_name = f'run-{run_num}'
-                            logger.info(f'--- Starting Run: {run_name} ---')
+                            logger.info(f'--- Starting Run: {run_name} of {total_run_count} ---')
                             # print_dict = {
                             #     h.name: hp_dict[h] for h in hp_dict
                             # }
@@ -130,6 +138,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                             final_metric = learner.fit(epochs = epochs,
                                 stopping_patience=stopping_patience,
                                 checkpoint_dir=os.path.join(working_dir, run_name))
+                            tf.summary.scalar(metric, final_metric, step=1)
 
                             run_num += 1
 
