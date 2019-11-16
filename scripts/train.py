@@ -7,6 +7,11 @@ from deepar.model.learner import DeepARLearner
 from sklearn.metrics import mean_squared_error
 from math import sqrt
 
+import tensorflow as tf
+from tensorboard.plugins.hparams import api as hp
+import logging
+logger = logging.getLogger('deepar')
+logger.setLevel(logging.INFO)
 
 def _time_col_to_seconds(df, dataset):
     if dataset == '56_sunspots':
@@ -37,9 +42,9 @@ def _create_ts_test_object(df, train_ds, dataset):
         test_ds = TimeSeriesTest(df, train_ds, target_idx = 2, timestamp_idx = 1, index_col=0, grouping_idx = 3)
     return test_ds
 
-def train(working_dir, dataset = '56_sunspots', epochs = 1):
+def train(working_dir, dataset = '56_sunspots', epochs = 100, stopping_patience = 3):
     # read in training df
-    df = pd.read_csv(f'/data/datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')
+    df = pd.read_csv(f'../../datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')
     df = _multi_index_prep(df, dataset)
     df = _time_col_to_seconds(df, dataset)
 
@@ -49,12 +54,12 @@ def train(working_dir, dataset = '56_sunspots', epochs = 1):
 
     # fit
     learner.fit(epochs = epochs, 
-        batches = 16, 
+        stopping_patience = stopping_patience,
         early_stopping = True, 
         checkpoint_dir = os.path.join("./checkpoints", working_dir))
 
     # evaluate
-    test_df = pd.read_csv(f'/data/datasets/seed_datasets_current/{dataset}/TEST/dataset_TEST/tables/learningData.csv')
+    test_df = pd.read_csv(f'../../datasets/seed_datasets_current/{dataset}/TEST/dataset_TEST/tables/learningData.csv')
     test_df = _multi_index_prep(test_df, dataset)
     test_df = _time_col_to_seconds(test_df, dataset)
     test_ds = _create_ts_test_object(test_df, ds, dataset)
@@ -66,6 +71,70 @@ def train(working_dir, dataset = '56_sunspots', epochs = 1):
 
     # scores = pd.read_csv('../datasets/seed_datasets_current/56_sunspots/SCORE/dataset_SCORE/tables/learningData.csv')
     # rms = sqrt(mean_squared_error(scores['sunspots'], preds))
-    
+
+def hp_search(working_dir, dataset = '56_sunspots', epochs=1, metric='eval_mae_result', stopping_patience=3):
+
+    working_dir = os.path.join("./checkpoints", working_dir)
+
+    # define domains for HP search
+    HP_EMB_DIM = hp.HParam('emb_dim', hp.Discrete([32, 64, 128, 256]))
+    HP_LSTM_DIM = hp.HParam('lstm_dim', hp.Discrete([32, 64, 128, 256]))
+    HP_DROPOUT = hp.HParam('lstm_dropout', hp.Discrete([0.1, 0.2, 0.3]))
+    HP_LR = hp.HParam('learning_rate', hp.Discrete([.0001, .001, .01]))    
+    HP_BS = hp.HParam('batch_size', hp.Discrete([32, 64, 128, 256]))
+    HP_WINDOW = hp.HParam('window_size', hp.Discrete([20, 30, 40, 50]))
+
+    # set up config 
+    with tf.summary.create_file_writer(working_dir).as_default():
+        hp.hparams_config(
+            hparams=[HP_EMB_DIM, HP_LSTM_DIM, HP_DROPOUT, HP_LR, HP_BS, HP_WINDOW],
+            metrics=[hp.Metric(metric, display_name=metric)]
+        )
+
+    # read in training df
+    df = pd.read_csv(f'../../datasets/seed_datasets_current/{dataset}/TRAIN/dataset_TRAIN/tables/learningData.csv')
+    df = _multi_index_prep(df, dataset)
+    df = _time_col_to_seconds(df, dataset)
+
+    # create TimeSeries and Learner objects
+    ds = _create_ts_object(df, dataset)
+
+    # grid search over parameters
+    run_num = 0
+    for emb_dim in HP_EMB_DIM.domain.values:
+        for lstm_dim in HP_LSTM_DIM.domain.values:
+            for dropout in HP_DROPOUT.domain.values:
+                for lr in HP_LR.domain.values:
+                    for bs in HP_BS.domain.values:
+                        for window_size in HP_WINDOW.domain.values:
+
+                            # create dict of parameters
+                            hp_dict = {
+                                'emb_dim': emb_dim,
+                                'lstm_dim': lstm_dim, 
+                                'dropout': dropout, 
+                                'learning_rate': lr, 
+                                'batch_size': bs, 
+                                'window_size': window_size,
+                            }
+                            run_name = f'run-{run_num}'
+                            logger.info(f'--- Starting Run: {run_name} ---')
+                            # print_dict = {
+                            #     h.name: hp_dict[h] for h in hp_dict
+                            # }
+                            logger.info(f'HP Dict: {hp_dict}')
+                            hp.hparams(hp_dict)
+
+                            # create learner and fit with these HPs
+                            learner = DeepARLearner(ds, verbose=1, hparams=hp_dict)
+                            final_metric = learner.fit(epochs = epochs,
+                                stopping_patience=stopping_patience,
+                                checkpoint_dir=os.path.join(working_dir, run_name))
+                                
+                            run_num += 1
+
 if __name__ == '__main__':
-  fire.Fire(train)
+  fire.Fire({
+      'train': train,
+      'search': hp_search
+  })

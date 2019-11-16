@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 class EarlyStopping(object):
     """ class that monitors a metric and stops training when the metric has stopped improving
     
@@ -19,10 +22,10 @@ class EarlyStopping(object):
     def __call__(self, cur_metric):
         
         if not self.active:
-            return
+            return False
         if self.prev_metric is None:
             self.prev_metric = cur_metric
-            return
+            return False
         else:
             if self.monitor_increase:
                 if cur_metric < self.prev_metric:
@@ -35,8 +38,10 @@ class EarlyStopping(object):
                 else:
                     self.degrade_count = 0
             if self.degrade_count > self.patience:
-                sys.exit(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
+                logging.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
+                return True
             self.prev_metric = cur_metric
+            return False
 
     # def _callbacks(self, filepath, early_stopping = True, val_set = True, stopping_patience = 0, scheduler_factor = 0.2, 
     #         scheduler_patience = 5, min_cosine_lr = 0):
