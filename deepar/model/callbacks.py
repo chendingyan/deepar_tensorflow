@@ -46,7 +46,7 @@ class EarlyStopping(object):
                     self.degrade_count = 0
 
         # check for early stopping criterion
-        if self.degrade_count > self.patience:
+        if self.degrade_count >= self.patience:
             logger.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
             return True
         else:

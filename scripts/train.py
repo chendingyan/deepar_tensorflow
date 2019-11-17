@@ -147,10 +147,11 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                                 stopping_patience=stopping_patience,
                                 stopping_delta=stopping_delta,
                                 checkpoint_dir=os.path.join(working_dir, run_name))
-                            outfile.write(f'HPs: {hp_dict} ---- Metric: {final_metric} ---- Time: {time.time() - start_time}')
+                            outfile.write(f'HPs: {hp_dict} ---- Metric: {final_metric} ---- Time: {round(time.time() - start_time,2)}\n')
                             tf.summary.scalar(metric, final_metric, step=1)
 
                             run_num += 1
+    outfile.close()
 
 if __name__ == '__main__':
   fire.Fire({
