@@ -162,16 +162,6 @@ class DeepARLearner:
         # Iterate over epochs.
         best_metric = math.inf
         for epoch in range(epochs):
-
-            # update best_metric and save new checkpoint if improvement
-            if val_gen is not None:
-                new_metric = eval_mae_result
-            else:
-                new_metric = epoch_loss_avg_result
-            if new_metric < best_metric:
-                best_metric = new_metric
-                checkpointer.save(file_prefix = filepath)
-
             logger.info(f'Start of epoch {epoch}')
             start_time = time.time()
             for batch, (x_batch_train, cat_labels, y_batch_train) in enumerate(train_gen):
@@ -241,6 +231,7 @@ class DeepARLearner:
                 tf.summary.scalar('val_loss', eval_loss_avg.result(), epoch)
                 tf.summary.scalar('val_mae', eval_mae_result, epoch)
                 tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
+                new_metric = eval_mae_result
 
                 # early stopping
                 if early_stopping_cb(eval_mae_result):
@@ -253,10 +244,16 @@ class DeepARLearner:
             else:
                 if early_stopping_cb(epoch_loss_avg_result):
                     break
+                new_metric = epoch_loss_avg_result
+            
+            # update best_metric and save new checkpoint if improvement
+            if new_metric < best_metric:
+                best_metric = new_metric
+                checkpointer.save(file_prefix = filepath)
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
-            
+
         return best_metric
 
     def fit(self, checkpoint_dir = None, validation = True, steps_per_epoch=50, epochs=100, early_stopping = True,
