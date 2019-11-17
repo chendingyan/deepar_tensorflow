@@ -9,40 +9,48 @@ class EarlyStopping(object):
                 when metric stops decreasing. 
             patience - after how many epochs of degrading performance should training be stopped
             active - whether early stopping callback is active or not
+            delta - within what range should a change be evaluated
     """
 
-    def __init__(self, monitor_increase = False, patience = 0, active = True):
+    def __init__(self, monitor_increase = False, patience = 0, delta = 0, active = True):
 
         self.monitor_increase = monitor_increase
         self.patience = patience
-        self.prev_metric = None
+        self.best_metric = None
         self.degrade_count = 0
         self.active = active
+        self.delta = delta
 
     def __call__(self, cur_metric):
         
+        # check for base cases
         if not self.active:
             return False
-        elif self.prev_metric is None:
-            self.prev_metric = cur_metric
+        elif self.best_metric is None:
+            self.best_metric = cur_metric
             return False
+
+        # update degrade_count according to parameters
         else:
             if self.monitor_increase:
-                if cur_metric < self.prev_metric:
+                if cur_metric < self.best_metric + self.delta:
                     self.degrade_count += 1
                 else:
+                    self.best_metric = cur_metric
                     self.degrade_count = 0
             else:
-                if cur_metric > self.prev_metric:
+                if cur_metric > self.best_metric - self.delta:
                     self.degrade_count += 1
                 else:
+                    self.best_metric = cur_metric
                     self.degrade_count = 0
-            if self.degrade_count > self.patience:
-                logger.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
-                return True
-            else:
-                self.prev_metric = cur_metric
-                return False
+
+        # check for early stopping criterion
+        if self.degrade_count > self.patience:
+            logger.info(f'Metric has degraded for {self.degrade_count} epochs, exiting training')
+            return True
+        else:
+            return False
 
     # def _callbacks(self, filepath, early_stopping = True, val_set = True, stopping_patience = 0, scheduler_factor = 0.2, 
     #         scheduler_patience = 5, min_cosine_lr = 0):

@@ -74,17 +74,18 @@ def train(working_dir, dataset = '56_sunspots', epochs = 100, stopping_patience 
     # scores = pd.read_csv('../datasets/seed_datasets_current/56_sunspots/SCORE/dataset_SCORE/tables/learningData.csv')
     # rms = sqrt(mean_squared_error(scores['sunspots'], preds))
 
-def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae_result', stopping_patience=3):
+def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae_result', stopping_patience=5,
+    stopping_delta = 1):
 
     working_dir = os.path.join("./checkpoints", working_dir)
 
     # define domains for HP search
-    HP_EMB_DIM = hp.HParam('emb_dim', hp.Discrete([32, 64, 128, 256]))
-    HP_LSTM_DIM = hp.HParam('lstm_dim', hp.Discrete([32, 64, 128, 256]))
+    HP_EMB_DIM = hp.HParam('emb_dim', hp.Discrete([32, 64, 128]))
+    HP_LSTM_DIM = hp.HParam('lstm_dim', hp.Discrete([32, 64, 128]))
     HP_DROPOUT = hp.HParam('lstm_dropout', hp.Discrete([0.1, 0.2, 0.3]))
     HP_LR = hp.HParam('learning_rate', hp.Discrete([.0001, .001, .01]))    
-    HP_BS = hp.HParam('batch_size', hp.Discrete([32, 64, 128, 256]))
-    HP_WINDOW = hp.HParam('window_size', hp.Discrete([20, 30, 40, 50]))
+    HP_BS = hp.HParam('batch_size', hp.Discrete([32, 64, 128]))
+    HP_WINDOW = hp.HParam('window_size', hp.Discrete([20, 40, 60]))
 
     # set up config 
     with tf.summary.create_file_writer(working_dir).as_default():
@@ -137,6 +138,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                             learner = DeepARLearner(ds, verbose=1, hparams=hp_dict)
                             final_metric = learner.fit(epochs = epochs,
                                 stopping_patience=stopping_patience,
+                                stopping_delta=stopping_delta,
                                 checkpoint_dir=os.path.join(working_dir, run_name))
                             tf.summary.scalar(metric, final_metric, step=1)
 

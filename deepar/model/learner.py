@@ -17,6 +17,7 @@ import numpy as np
 import os
 import time
 import sys
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +137,8 @@ class DeepARLearner:
 
         return model
 
-    def _training_loop(self, train_gen, val_gen, epochs = 100, steps_per_epoch = 50, early_stopping = True, 
-        stopping_patience = 0):
+    def _training_loop(self, filepath, checkpointer, train_gen, val_gen, epochs = 100, steps_per_epoch = 50, 
+        early_stopping = True, stopping_patience = 5, stopping_delta = 1):
         """ 
         util function
             iterates over batches, updates gradients, records metrics, writes to tb, checkpoints, early stopping
@@ -151,13 +152,26 @@ class DeepARLearner:
         eval_rmse = RootMeanSquaredError()
 
         # set up early stopping callback
-        early_stopping_cb = EarlyStopping(patience = stopping_patience, active = early_stopping)
+        early_stopping_cb = EarlyStopping(patience = stopping_patience, 
+            active = early_stopping, 
+            delta = stopping_delta)
 
         # setup table for unscaling
         lookup_table = build_tf_lookup(self.ts_obj.target_means)
 
         # Iterate over epochs.
+        best_metric = math.inf
         for epoch in range(epochs):
+
+            # update best_metric and save new checkpoint if improvement
+            if val_gen is not None:
+                new_metric = eval_mae_result
+            else:
+                new_metric = epoch_loss_avg_result
+            if new_metric < best_metric:
+                best_metric = new_metric
+                checkpointer.save(file_prefix = filepath)
+
             logger.info(f'Start of epoch {epoch}')
             start_time = time.time()
             for batch, (x_batch_train, cat_labels, y_batch_train) in enumerate(train_gen):
@@ -242,16 +256,11 @@ class DeepARLearner:
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
-        
-        # return final metric
-        if val_gen is not None:
-            final_metric = eval_mae_result
-        else:
-            final_metric = epoch_loss_avg_result
-        return final_metric
+            
+        return best_metric
 
     def fit(self, checkpoint_dir = None, validation = True, steps_per_epoch=50, epochs=100, early_stopping = True,
-        stopping_patience = 0):
+        stopping_patience = 5, stopping_delta = 1):
 
         """ fits DeepAR model for steps_per_epoch * epochs iterations
                 :param checkpoint_dir: directory to save checkpoint and tensorboard files
@@ -261,17 +270,18 @@ class DeepARLearner:
                 :param epochs: number of epochs
                 :param early_stopping: whether to include early stopping callback
                 :param stopping_patience: early stopping callback patience, default 0
-                :return: final_metric (train loss or eval MAE) after fitting 
+                :param stopping_delta: early stopping delta (range for which change should be checked)
+                :return: final_metric best (train loss or eval MAE) after fitting 
         """
 
         self.epochs = epochs
 
         # try to load previously saved checkpoint from filepath
+        checkpointer = tf.train.Checkpoint(optimizer = self.optimizer, model = self.model)
         if checkpoint_dir is not None:
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
             filepath = os.path.join(checkpoint_dir, "{epoch:04d}.ckpt")
-            checkpointer = tf.train.Checkpoint(optimizer = self.optimizer, model = self.model)
             latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
             if latest_ckpt:
                 checkpointer.restore(latest_ckpt)
@@ -302,12 +312,15 @@ class DeepARLearner:
             val_gen = None
 
         # Iterate over epochs.
-        return self._training_loop(train_gen, 
+        return self._training_loop(filepath,
+            checkpointer,
+            train_gen, 
             val_gen, 
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
             early_stopping=early_stopping,
-            stopping_patience=stopping_patience)
+            stopping_patience=stopping_patience,
+            stopping_delta=stopping_delta)
 
     def predict(self, test_ts_obj, horizon = None, samples = 1, include_all_training = False):
         """ 
