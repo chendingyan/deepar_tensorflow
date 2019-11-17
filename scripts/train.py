@@ -10,9 +10,11 @@ import sys
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 import logging
+import time
+
 logger = logging.getLogger('deepar')
-# handler = logging.StreamHandler(sys.stdout)
-# logger.addHandler(handler)
+handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 def _time_col_to_seconds(df, dataset):
@@ -110,6 +112,10 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
         len(HP_LR.domain.values) * \
         len(HP_BS.domain.values) * \
         len(HP_WINDOW.domain.values)
+
+    # outfile for saving hp config and runtimes
+    outfile = open(os.path.join(working_dir, "metrics.txt"), "w+")
+
     for emb_dim in HP_EMB_DIM.domain.values:
         for lstm_dim in HP_LSTM_DIM.domain.values:
             for dropout in HP_DROPOUT.domain.values:
@@ -135,11 +141,13 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                             hp.hparams(hp_dict)
 
                             # create learner and fit with these HPs
+                            start_time = time.time()
                             learner = DeepARLearner(ds, verbose=1, hparams=hp_dict)
                             final_metric = learner.fit(epochs = epochs,
                                 stopping_patience=stopping_patience,
                                 stopping_delta=stopping_delta,
                                 checkpoint_dir=os.path.join(working_dir, run_name))
+                            outfile.write(f'HPs: {hp_dict} ---- Metric: {final_metric} ---- Time: {time.time() - start_time}')
                             tf.summary.scalar(metric, final_metric, step=1)
 
                             run_num += 1
