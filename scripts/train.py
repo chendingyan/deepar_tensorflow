@@ -114,7 +114,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
         len(HP_WINDOW.domain.values)
 
     # outfile for saving hp config and runtimes
-    outfile = open(os.path.join(working_dir, "metrics.txt"), "w+")
+    outfile = open(os.path.join(working_dir, "metrics.txt"), "w+", buffering=1)
 
     for emb_dim in HP_EMB_DIM.domain.values:
         for lstm_dim in HP_LSTM_DIM.domain.values:
@@ -127,7 +127,7 @@ def hp_search(working_dir, dataset = '56_sunspots', epochs=100, metric='eval_mae
                             hp_dict = {
                                 'emb_dim': emb_dim,
                                 'lstm_dim': lstm_dim, 
-                                'dropout': dropout, 
+                                'lstm_dropout': dropout, 
                                 'learning_rate': lr, 
                                 'batch_size': bs, 
                                 'window_size': window_size,

@@ -55,6 +55,9 @@ class DeepARLearner:
             self.lr = hparams['learning_rate']
             self.train_window = hparams['window_size']
             batch_size = hparams['batch_size']
+            emb_dim = hparams['emb_dim']
+            lstm_dim = hparams['lstm_dim']
+            lstm_dropout = hparams['lstm_dropout']
 
         # make sure batch_size is at least as big as # of groups in training set 
         # (to support batched inference over all groups during test)
@@ -70,10 +73,9 @@ class DeepARLearner:
             output_dim=output_dim,
             emb_dim=emb_dim, 
             lstm_dim=lstm_dim,
-            dropout=dropout,
+            dropout=lstm_dropout,
             count_data=self.ts_obj.count_data,
-            inference_mask=inference_mask,
-            hparams=hparams)
+            inference_mask=inference_mask)
 
         # define optimizer
         if optimizer == 'adam':
@@ -90,38 +92,25 @@ class DeepARLearner:
             self.loss_fn = GaussianLogLikelihood(mask_value = self.ts_obj.mask_value)
 
     def _create_model(self, num_cats, num_features, output_dim = 1, emb_dim = 128, lstm_dim = 128, 
-        batch_size = 16, dropout = 0.1, count_data = False, inference_mask = -1, hparams = None):
+        batch_size = 16, dropout = 0.1, count_data = False, inference_mask = -1):
         """ 
         util function
             creates model architecture (Sequential) with arguments specified in constructor
         """
 
-        if hparams is None:
-            cont_inputs = Input(shape = (self.train_window, num_features), batch_size = self.batch_size)
-            cat_inputs = Input(shape = (self.train_window,), batch_size = self.batch_size)
-            embedding = Embedding(num_cats, emb_dim)(cat_inputs)
-        else:
-            cont_inputs = Input(shape = (hparams['window_size'], num_features), batch_size = hparams['batch_size'])
-            cat_inputs = Input(shape = (hparams['window_size'],), batch_size = hparams['batch_size'])
-            embedding = Embedding(num_cats, hparams['emb_dim'])(cat_inputs)
+        cont_inputs = Input(shape = (self.train_window, num_features), batch_size = self.batch_size)
+        cat_inputs = Input(shape = (self.train_window,), batch_size = self.batch_size)
+        embedding = Embedding(num_cats, emb_dim)(cat_inputs)
 
         masked_input = Masking(mask_value = inference_mask)(cont_inputs)
         concatenate = Concatenate()([masked_input, embedding])
 
-        if hparams is None:
-            lstm_out = LSTMResetStateful(lstm_dim, 
-                return_sequences = True,
-                stateful = True,
-                dropout = dropout, 
-                recurrent_dropout = dropout, 
-                name = 'lstm')(concatenate)
-        else:
-            lstm_out = LSTMResetStateful(hparams['lstm_dim'], 
-                return_sequences = True,
-                stateful = True,
-                dropout = hparams['dropout'], 
-                recurrent_dropout = hparams['dropout'], 
-                name = 'lstm')(concatenate)
+        lstm_out = LSTMResetStateful(lstm_dim, 
+            return_sequences = True,
+            stateful = True,
+            dropout = dropout, 
+            recurrent_dropout = dropout, 
+            name = 'lstm')(concatenate)
 
         mu = Dense(output_dim, 
             kernel_initializer = 'glorot_normal',
