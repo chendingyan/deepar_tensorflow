@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class DeepARLearner:
     def __init__(self, ts_obj, output_dim = 1, emb_dim = 128, lstm_dim = 128, dropout = 0.1, 
         optimizer = 'adam', lr = 0.001, batch_size = 16, scheduler = None, train_window = 20, verbose = 0, 
-        inference_mask = -1, hparams = None):
+        inference_mask = -1, random_seed = None, hparams = None):
         """
             initialize DeepAR model
                 :param ts_obj: DeepAR time series Dataset
@@ -39,8 +39,12 @@ class DeepARLearner:
                 :param train_window: the length of time series sampled for training. consistent throughout
                 :param verbose: default false
                 :param inference_mask: mask to use on testing timestep indices > 1 (bc predictions batched)
-                :param dict of hyperparameters (keys) and hp domain (values) over which to search
+                :param random_seed: optional random seed to control randomness throughout learner
+                :param dict of hyperparameters (keys) and hp domain (values) over which to search    
         """
+
+        if random_seed is not None:
+            tf.random.set_seed(random_seed)
 
         assert verbose == 0 or verbose == 1, 'argument verbose must be 0 or 1'
         if verbose == 1:
@@ -57,7 +61,7 @@ class DeepARLearner:
             batch_size = hparams['batch_size']
             emb_dim = hparams['emb_dim']
             lstm_dim = hparams['lstm_dim']
-            lstm_dropout = hparams['lstm_dropout']
+            dropout = hparams['lstm_dropout']
 
         # make sure batch_size is at least as big as # of groups in training set 
         # (to support batched inference over all groups during test)
@@ -73,7 +77,7 @@ class DeepARLearner:
             output_dim=output_dim,
             emb_dim=emb_dim, 
             lstm_dim=lstm_dim,
-            dropout=lstm_dropout,
+            dropout=dropout,
             count_data=self.ts_obj.count_data,
             inference_mask=inference_mask)
 
@@ -90,6 +94,20 @@ class DeepARLearner:
             self.loss_fn = NegativeBinomialLogLikelihood(mask_value = self.ts_obj.mask_value)
         else:
             self.loss_fn = GaussianLogLikelihood(mask_value = self.ts_obj.mask_value)
+
+    def save_weights(self, filepath):
+        """
+        util function
+            saves model's current weights to filepath
+        """
+        self.model.save_weights(filepath)
+
+    def load_weights(self, filepath):
+        """
+        util function
+            loads weights from filepath into model'
+        """
+        self.model.load_weights(filepath)
 
     def _create_model(self, num_cats, num_features, output_dim = 1, emb_dim = 128, lstm_dim = 128, 
         batch_size = 16, dropout = 0.1, count_data = False, inference_mask = -1):
@@ -110,6 +128,7 @@ class DeepARLearner:
             stateful = True,
             dropout = dropout, 
             recurrent_dropout = dropout, 
+            unit_forget_bias = True,
             name = 'lstm')(concatenate)
 
         mu = Dense(output_dim, 
@@ -168,7 +187,8 @@ class DeepARLearner:
                     loss_value = self.loss_fn(y_batch_train, (mu, scale))
                 
                 # sgd
-                tf.summary.scalar('train_loss', loss_value, epoch * steps_per_epoch + batch)
+                if self.tb:
+                    tf.summary.scalar('train_loss', loss_value, epoch * steps_per_epoch + batch)
                 batch_loss_avg(loss_value)
                 epoch_loss_avg(loss_value)
                 grads = tape.gradient(loss_value, self.model.trainable_weights)
@@ -217,9 +237,10 @@ class DeepARLearner:
                 logger.info(f'Validation took {round(time.time() - start_time, 0)}s')
                 logger.info(f'Epoch {epoch}: Val loss on {steps_per_epoch} steps: {eval_loss_avg.result()}')
                 logger.info(f'Epoch {epoch}: Val MAE: {eval_mae_result}, RMSE: {eval_rmse.result()}')
-                tf.summary.scalar('val_loss', eval_loss_avg.result(), epoch)
-                tf.summary.scalar('val_mae', eval_mae_result, epoch)
-                tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
+                if self.tb:
+                    tf.summary.scalar('val_loss', eval_loss_avg.result(), epoch)
+                    tf.summary.scalar('val_mae', eval_mae_result, epoch)
+                    tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
                 new_metric = eval_mae_result
 
                 # early stopping
@@ -243,10 +264,10 @@ class DeepARLearner:
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
 
-        return best_metric
+        return best_metric, epoch + 1
 
     def fit(self, checkpoint_dir = None, validation = True, steps_per_epoch=50, epochs=100, early_stopping = True,
-        stopping_patience = 5, stopping_delta = 1):
+        stopping_patience = 5, stopping_delta = 1, tensorboard = True):
 
         """ fits DeepAR model for steps_per_epoch * epochs iterations
                 :param checkpoint_dir: directory to save checkpoint and tensorboard files
@@ -257,7 +278,9 @@ class DeepARLearner:
                 :param early_stopping: whether to include early stopping callback
                 :param stopping_patience: early stopping callback patience, default 0
                 :param stopping_delta: early stopping delta (range for which change should be checked)
-                :return: final_metric best (train loss or eval MAE) after fitting 
+                :param tensorboard: whether to write output to tensorboard logs
+                :return: 1) final_metric best (train loss or eval MAE) after fitting
+                         2) number of iterations completed (might have been impacted by stopping criterion) 
         """
 
         self.epochs = epochs
@@ -271,11 +294,12 @@ class DeepARLearner:
             latest_ckpt = tf.train.latest_checkpoint(checkpoint_dir)
             if latest_ckpt:
                 checkpointer.restore(latest_ckpt)
-        else:
+        elif tensorboard:
             # create tensorboard log files in default location
             checkpoint_dir = "./tb/"
-        tb_writer = tf.summary.create_file_writer(checkpoint_dir)
-        tb_writer.set_as_default()
+            tb_writer = tf.summary.create_file_writer(checkpoint_dir)
+            tb_writer.set_as_default()
+        self.tb = tensorboard
 
         # train generator
         train_gen = train_ts_generator(self.model, 
