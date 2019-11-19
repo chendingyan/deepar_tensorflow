@@ -259,7 +259,8 @@ class DeepARLearner:
             # update best_metric and save new checkpoint if improvement
             if new_metric < best_metric:
                 best_metric = new_metric
-                checkpointer.save(file_prefix = filepath)
+                if filepath is not None:
+                    checkpointer.save(file_prefix = filepath)
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
@@ -299,6 +300,8 @@ class DeepARLearner:
             checkpoint_dir = "./tb/"
             tb_writer = tf.summary.create_file_writer(checkpoint_dir)
             tb_writer.set_as_default()
+        else:
+            filepath = None
         self.tb = tensorboard
 
         # train generator
