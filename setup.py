@@ -8,7 +8,7 @@ setup(name='deepar',
       url='https://github.com/NewKnowledge/deepar/tree/master',
       install_requires=['tensorflow-gpu==2.0.0', 
             'numpy>=1.15.4,<=1.17.3',
-            'pandas>=0.23.4,<=0.25.2'
+            'pandas>=0.23.4,<=0.25.2',
             'scikit-learn[alldeps]>=0.20.3,<=0.21.3'],
       packages=find_packages()
      )
