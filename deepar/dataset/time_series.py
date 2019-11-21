@@ -5,12 +5,17 @@ import logging
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import tensorflow as tf
 
+import logging
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
+
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class TimeSeries(Dataset):
 
     def __init__(self, pandas_df, target_idx = None, timestamp_idx = None, grouping_idx=None, one_hot_indices=None, 
-                 index_col = None, count_data=False, negative_obs = 1, val_split = 0.2, mask_value = -10000):
+                 index_col = None, count_data=False, negative_obs = 1, val_split = 0.2, mask_value = -10000, 
+                 integer_timestamps = False):
         """
             :param pandas_df: df to sample time series from
             :param target_idx: index of target column, if None Error will be raised
@@ -22,10 +27,14 @@ class TimeSeries(Dataset):
             :param negative_obs: how far before beginning of time series is it possible to set t
             :param val_split: proportion of data to withhold for validation
             :param mask_value: mask to use on missing target values
+            :param integer_timestamps: whether timestamp column is expressed in ints (instead of s)
         """
         super().__init__()
 
         self.data = pandas_df
+
+        # store constructor arguments as instance variables
+        self.integer_timestamps = integer_timestamps
         self.one_hot_indices = one_hot_indices
         self.negative_obs = negative_obs
         col_names = list(self.data)
@@ -34,7 +43,6 @@ class TimeSeries(Dataset):
             self.grouping_name = 'category'
         else:
             self.grouping_name = col_names[grouping_idx]
-
         self.timestamp_idx = timestamp_idx
         self.count_data = count_data
         self.mask_value = mask_value
@@ -86,7 +94,10 @@ class TimeSeries(Dataset):
             raise ValueError('Must provide the index of the timestamp column to instantiate this class')
         time_name = col_names[self.timestamp_idx]
         self.data = self.data.sort_values(by = time_name)
-        self.data[time_name] = pd.to_datetime(self.data[time_name], unit = 's')
+        if self.integer_timestamps:
+            self.data[time_name] = pd.to_datetime(self.data[time_name] - 1, unit = 'D')
+        else:
+            self.data[time_name] = pd.to_datetime(self.data[time_name], unit = 's')
         return time_name
 
     def _age_augmentation(self):
@@ -371,8 +382,8 @@ class TimeSeries(Dataset):
         data = pd.concat(sampled)
 
         # [cont_inputs, cat_inputs], cat_labels, targets
-        return ([data.drop(['target', self.grouping_name], 1).values.reshape(batch_size, window_size, -1),
-               data[self.grouping_name].values.reshape(batch_size, window_size)], 
+        return ([tf.constant(data.drop(['target', self.grouping_name], 1).values.reshape(batch_size, window_size, -1), dtype = tf.float32),
+               tf.constant(data[self.grouping_name].values.reshape(batch_size, window_size), dtype = tf.float32)], 
                tf.constant(cat_samples.reshape(batch_size, 1), dtype = tf.int32),
                tf.constant(data['target'].values.reshape(batch_size, window_size, 1), dtype = tf.float32))
 
@@ -392,6 +403,8 @@ class TimeSeriesTest(TimeSeries):
         """
         
         self.data = pandas_df
+
+        # store constructor arguments as instance variables
         self.one_hot_indices = one_hot_indices
         col_names = list(self.data)
         if grouping_idx is None:
@@ -400,9 +413,12 @@ class TimeSeriesTest(TimeSeries):
         else:
             self.grouping_name = col_names[grouping_idx]
         self.timestamp_idx = timestamp_idx
-        self.count_data = train_ts_obj.count_data
-        self.train_ts_obj = train_ts_obj
         self.mask_value = mask_value
+
+        # some instance variables read from train ts object
+        self.train_ts_obj = train_ts_obj
+        self.integer_timestamps = train_ts_obj.integer_timestamps
+        self.count_data = train_ts_obj.count_data
 
         if self.data is None:
             raise ValueError('Must provide a Pandas df to instantiate this class')
@@ -425,7 +441,9 @@ class TimeSeriesTest(TimeSeries):
             if group not in train_ts_obj.unique_cats:
                 train_ts_obj.train_set_ages[group] = 0
                 self.new_test_groups.append(group)
-        self.data['age'] = self.data.groupby(self.grouping_name).cumcount()
+        
+        # add 1 because cumcount() starts at 0
+        self.data['age'] = self.data.groupby(self.grouping_name).cumcount() + 1
         self.data['age'] += train_ts_obj.train_set_ages[self.data[self.grouping_name]].reset_index(drop=True)
 
          # datetime features
@@ -607,8 +625,10 @@ class TimeSeriesTest(TimeSeries):
         # so doesn't matter if dropped here
         x_cont = batch_data.drop([self.grouping_name], 1).values.reshape(len(self.test_groups), window_size, -1)
         x_cat = batch_data[self.grouping_name].values.reshape(len(self.test_groups), window_size)
-        x_cont = np.append(x_cont, [x_cont[0]] * (batch_size - len(self.test_groups)), axis = 0)
-        x_cat = np.append(x_cat, [x_cat[0]] * (batch_size - len(self.test_groups)), axis = 0)
+        x_cont = tf.Variable(np.append(x_cont, [x_cont[0]] * (batch_size - len(self.test_groups)), axis = 0), 
+            dtype = tf.float32)
+        x_cat = tf.constant(np.append(x_cat, [x_cat[0]] * (batch_size - len(self.test_groups)), axis = 0), 
+            dtype = tf.float32)
         return ([x_cont, x_cat], self.batch_idx - self.train_batch_ct) 
 
 def train_ts_generator(model, ts_obj, batch_size, window_size, verbose = False, padding_value = 0, val_set = False):

@@ -20,6 +20,7 @@ import sys
 import math
 
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 class DeepARLearner:
     def __init__(self, ts_obj, output_dim = 1, emb_dim = 128, lstm_dim = 128, dropout = 0.1, 
@@ -261,10 +262,15 @@ class DeepARLearner:
                 best_metric = new_metric
                 if filepath is not None:
                     checkpointer.save(file_prefix = filepath)
+                else:
+                    self.save_weights('model_best_weights.h5')
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
 
+        # load in best weights before returning if not saving to filepath
+        if filepath is None:
+           self.load_weights('model_best_weights.h5')
         return best_metric, epoch + 1
 
     def fit(self, checkpoint_dir = None, validation = True, steps_per_epoch=50, epochs=100, early_stopping = True,
@@ -383,7 +389,8 @@ class DeepARLearner:
             if horizon_idx > 1:
                 # add one sample from previous predictions to test batches 
                 # all dim 0, first row of dim 1, last col of dim 3
-                x_test[0][:, :1, -1:] = mu
+                x_test_new = x_test[0][:, :1, -1:].assign(mu)
+                x_test = [x_test_new, x_test[1]]
 
             # get first column predictions (squeeze 1st dim - horizon)
             mu, scale = self.model(x_test)
