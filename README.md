@@ -8,7 +8,7 @@ Influenced by these two open-source implementations: https://github.com/arrigoni
 
 **deepar/model**: 
 
-1. **learner.py**: contains a *DeepARLearner* class, which creates the model structure and implements a custom training loop. The model learns a categorical embedding for each unique time series group. It also performs ancestral sampling during inference (for arbitrary horizons into the future) and generates *n* samples at each timestemp. Ancestral sampling can be conditioned with the whole training time series or just the final window.
+1. **learner.py**: contains a *DeepARLearner* class, which creates the model structure and implements a custom training loop. The model learns a categorical embedding for each unique time series group. It also performs ancestral sampling during inference (for arbitrary horizons into the future) and generates *n* samples at each timestep. Ancestral sampling can be conditioned with the whole training time series or just the final window.
 
 2. **layers.py**: contains custom *LSTMResetStateful* layer and *GaussianLayer* layer (the latter is from https://github.com/arrigonialberto86/deepar and unused in current codebase)
 
