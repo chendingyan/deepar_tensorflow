@@ -1,13 +1,23 @@
 import tensorflow as tf
 
-from tensorflow.keras.layers import Input, Dense, LSTM, Masking, Embedding, Concatenate
+from tensorflow.keras.layers import Input, Dense, LSTM, Embedding, Concatenate
 from tensorflow.keras.models import Model
 from tensorflow.keras.activations import relu, softplus
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler, ReduceLROnPlateau, TensorBoard
+from tensorflow.keras.callbacks import (
+    ModelCheckpoint,
+    LearningRateScheduler,
+    ReduceLROnPlateau,
+    TensorBoard,
+)
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError, Mean
 
-from deepar.model.loss import unscale, GaussianLogLikelihood, NegativeBinomialLogLikelihood, build_tf_lookup
+from deepar.model.loss import (
+    unscale,
+    GaussianLogLikelihood,
+    NegativeBinomialLogLikelihood,
+    build_tf_lookup,
+)
 from deepar.dataset.time_series import train_ts_generator, test_ts_generator
 from deepar.model.layers import LSTMResetStateful, GaussianLayer
 from deepar.model.callbacks import EarlyStopping
@@ -20,12 +30,27 @@ import sys
 import math
 
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
+# logger.setLevel(logging.DEBUG)
+
 
 class DeepARLearner:
-    def __init__(self, ts_obj, output_dim = 1, emb_dim = 128, lstm_dim = 128, dropout = 0.1, 
-        optimizer = 'adam', lr = 0.001, batch_size = 16, scheduler = None, train_window = 20, verbose = 0, 
-        inference_mask = -1, random_seed = None, hparams = None):
+    def __init__(
+        self,
+        ts_obj,
+        output_dim=1,
+        emb_dim=128,
+        lstm_dim=128,
+        dropout=0.1,
+        optimizer="adam",
+        lr=0.001,
+        batch_size=16,
+        scheduler=None,
+        train_window=20,
+        verbose=0,
+        mask_value=0,
+        random_seed=None,
+        hparams=None,
+    ):
         """
             initialize DeepAR model
                 :param ts_obj: DeepAR time series Dataset
@@ -39,7 +64,6 @@ class DeepARLearner:
                 :param scheduler: default None (use adam)
                 :param train_window: the length of time series sampled for training. consistent throughout
                 :param verbose: default false
-                :param inference_mask: mask to use on testing timestep indices > 1 (bc predictions batched)
                 :param random_seed: optional random seed to control randomness throughout learner
                 :param dict of hyperparameters (keys) and hp domain (values) over which to search    
         """
@@ -47,7 +71,7 @@ class DeepARLearner:
         if random_seed is not None:
             tf.random.set_seed(random_seed)
 
-        assert verbose == 0 or verbose == 1, 'argument verbose must be 0 or 1'
+        assert verbose == 0 or verbose == 1, "argument verbose must be 0 or 1"
         if verbose == 1:
             logger.setLevel(logging.INFO)
         self.verbose = verbose
@@ -57,14 +81,14 @@ class DeepARLearner:
             self.lr = lr
             self.train_window = train_window
         else:
-            self.lr = hparams['learning_rate']
-            self.train_window = hparams['window_size']
-            batch_size = hparams['batch_size']
-            emb_dim = hparams['emb_dim']
-            lstm_dim = hparams['lstm_dim']
-            dropout = hparams['lstm_dropout']
+            self.lr = hparams["learning_rate"]
+            self.train_window = hparams["window_size"]
+            batch_size = hparams["batch_size"]
+            emb_dim = hparams["emb_dim"]
+            lstm_dim = hparams["lstm_dim"]
+            dropout = hparams["lstm_dropout"]
 
-        # make sure batch_size is at least as big as # of groups in training set 
+        # make sure batch_size is at least as big as # of groups in training set
         # (to support batched inference over all groups during test)
         if batch_size < ts_obj.num_cats:
             batch_size = ts_obj.num_cats
@@ -73,28 +97,31 @@ class DeepARLearner:
         self.ts_obj = ts_obj
 
         # define model
-        self.model = self._create_model(self.ts_obj.num_cats, 
-            self.ts_obj.features, 
+        self.model = self._create_model(
+            self.ts_obj.num_cats,
+            self.ts_obj.features,
             output_dim=output_dim,
-            emb_dim=emb_dim, 
+            emb_dim=emb_dim,
             lstm_dim=lstm_dim,
             dropout=dropout,
             count_data=self.ts_obj.count_data,
-            inference_mask=inference_mask)
+        )
 
         # define optimizer
-        if optimizer == 'adam':
-            self.optimizer = Adam(learning_rate = self.lr)
-        elif optimizer == 'sgd':
-            self.optimizer = SGD(lr = self.lr, momentum=0.1, nesterov=True)
+        if optimizer == "adam":
+            self.optimizer = Adam(learning_rate=self.lr)
+        elif optimizer == "sgd":
+            self.optimizer = SGD(lr=self.lr, momentum=0.1, nesterov=True)
         else:
             self.optimizer = optimizer
 
         # define loss function
         if self.ts_obj.count_data:
-            self.loss_fn = NegativeBinomialLogLikelihood(mask_value = self.ts_obj.mask_value)
+            self.loss_fn = NegativeBinomialLogLikelihood(
+                mask_value=self.ts_obj.mask_value
+            )
         else:
-            self.loss_fn = GaussianLogLikelihood(mask_value = self.ts_obj.mask_value)
+            self.loss_fn = GaussianLogLikelihood(mask_value=self.ts_obj.mask_value)
 
     def save_weights(self, filepath):
         """
@@ -110,44 +137,69 @@ class DeepARLearner:
         """
         self.model.load_weights(filepath)
 
-    def _create_model(self, num_cats, num_features, output_dim = 1, emb_dim = 128, lstm_dim = 128, 
-        batch_size = 16, dropout = 0.1, count_data = False, inference_mask = -1):
+    def _create_model(
+        self,
+        num_cats,
+        num_features,
+        output_dim=1,
+        emb_dim=128,
+        lstm_dim=128,
+        batch_size=16,
+        dropout=0.1,
+        count_data=False,
+    ):
         """ 
         util function
             creates model architecture (Sequential) with arguments specified in constructor
         """
 
-        cont_inputs = Input(shape = (self.train_window, num_features), batch_size = self.batch_size)
-        cat_inputs = Input(shape = (self.train_window,), batch_size = self.batch_size)
+        cont_inputs = Input(
+            shape=(self.train_window, num_features), batch_size=self.batch_size
+        )
+        cat_inputs = Input(shape=(self.train_window,), batch_size=self.batch_size)
         embedding = Embedding(num_cats, emb_dim)(cat_inputs)
+        concatenate = Concatenate()([cont_inputs, embedding])
 
-        masked_input = Masking(mask_value = inference_mask)(cont_inputs)
-        concatenate = Concatenate()([masked_input, embedding])
+        lstm_out = LSTMResetStateful(
+            lstm_dim,
+            return_sequences=True,
+            stateful=True,
+            dropout=dropout,
+            recurrent_dropout=dropout,
+            unit_forget_bias=True,
+            name="lstm",
+        )(concatenate)
 
-        lstm_out = LSTMResetStateful(lstm_dim, 
-            return_sequences = True,
-            stateful = True,
-            dropout = dropout, 
-            recurrent_dropout = dropout, 
-            unit_forget_bias = True,
-            name = 'lstm')(concatenate)
+        mu = Dense(
+            output_dim,
+            kernel_initializer="glorot_normal",
+            bias_initializer="glorot_normal",
+            name="mu",
+        )(lstm_out)
 
-        mu = Dense(output_dim, 
-            kernel_initializer = 'glorot_normal',
-            bias_initializer = 'glorot_normal',
-            name = 'mu')(lstm_out)
+        sigma = Dense(
+            output_dim,
+            kernel_initializer="glorot_normal",
+            bias_initializer="glorot_normal",
+            name="sigma",
+        )(lstm_out)
 
-        sigma = Dense(output_dim, 
-            kernel_initializer = 'glorot_normal',
-            bias_initializer = 'glorot_normal',
-            name = 'sigma')(lstm_out)
-        
-        model = Model(inputs = [cont_inputs, cat_inputs], outputs = [mu, sigma])
+        model = Model(inputs=[cont_inputs, cat_inputs], outputs=[mu, sigma])
 
         return model
 
-    def _training_loop(self, filepath, checkpointer, train_gen, val_gen, epochs = 100, steps_per_epoch = 50, 
-        early_stopping = True, stopping_patience = 5, stopping_delta = 1):
+    def _training_loop(
+        self,
+        filepath,
+        checkpointer,
+        train_gen,
+        val_gen,
+        epochs=100,
+        steps_per_epoch=50,
+        early_stopping=True,
+        stopping_patience=5,
+        stopping_delta=1,
+    ):
         """ 
         util function
             iterates over batches, updates gradients, records metrics, writes to tb, checkpoints, early stopping
@@ -161,9 +213,9 @@ class DeepARLearner:
         eval_rmse = RootMeanSquaredError()
 
         # set up early stopping callback
-        early_stopping_cb = EarlyStopping(patience = stopping_patience, 
-            active = early_stopping, 
-            delta = stopping_delta)
+        early_stopping_cb = EarlyStopping(
+            patience=stopping_patience, active=early_stopping, delta=stopping_delta
+        )
 
         # setup table for unscaling
         lookup_table = build_tf_lookup(self.ts_obj.target_means)
@@ -171,25 +223,29 @@ class DeepARLearner:
         # Iterate over epochs.
         best_metric = math.inf
         for epoch in range(epochs):
-            logger.info(f'Start of epoch {epoch}')
+            logger.info(f"Start of epoch {epoch}")
             start_time = time.time()
-            for batch, (x_batch_train, cat_labels, y_batch_train) in enumerate(train_gen):
+            for batch, (x_batch_train, cat_labels, y_batch_train) in enumerate(
+                train_gen
+            ):
 
                 # compute loss
-                with tf.GradientTape(persistent = True) as tape:
-                    mu, scale = self.model(x_batch_train, training = True) 
-                    
-                    # softplus parameters 
+                with tf.GradientTape(persistent=True) as tape:
+                    mu, scale = self.model(x_batch_train, training=True)
+
+                    # softplus parameters
                     scale = softplus(scale)
                     if self.ts_obj.count_data:
                         mu = softplus(mu)
 
                     mu, scale = unscale(mu, scale, cat_labels, lookup_table)
                     loss_value = self.loss_fn(y_batch_train, (mu, scale))
-                
+
                 # sgd
                 if self.tb:
-                    tf.summary.scalar('train_loss', loss_value, epoch * steps_per_epoch + batch)
+                    tf.summary.scalar(
+                        "train_loss", loss_value, epoch * steps_per_epoch + batch
+                    )
                 batch_loss_avg(loss_value)
                 epoch_loss_avg(loss_value)
                 grads = tape.gradient(loss_value, self.model.trainable_weights)
@@ -197,28 +253,32 @@ class DeepARLearner:
 
                 # Log 5x per epoch.
                 if batch % (steps_per_epoch // 5) == 0 and batch != 0:
-                    logger.info(f'Epoch {epoch}: Avg train loss over last {(steps_per_epoch // 5)} steps: {batch_loss_avg.result()}')
+                    logger.info(
+                        f"Epoch {epoch}: Avg train loss over last {(steps_per_epoch // 5)} steps: {batch_loss_avg.result()}"
+                    )
                     batch_loss_avg.reset_states()
-                
+
                 # Run each epoch batches times
                 epoch_loss_avg_result = epoch_loss_avg.result()
                 if batch == steps_per_epoch:
-                    logger.info(f'Epoch {epoch} took {round(time.time() - start_time, 0)}s : Avg train loss: {epoch_loss_avg_result}')
+                    logger.info(
+                        f"Epoch {epoch} took {round(time.time() - start_time, 0)}s : Avg train loss: {epoch_loss_avg_result}"
+                    )
                     break
-                
+
             # validation
             if val_gen is not None:
-                logger.info(f'End of epoch {epoch}, validating...')
+                logger.info(f"End of epoch {epoch}, validating...")
                 start_time = time.time()
                 for batch, (x_batch_val, cat_labels, y_batch_val) in enumerate(val_gen):
-                    
+
                     # compute loss, doesn't need to be persistent bc not updating weights
                     with tf.GradientTape() as tape:
 
                         # treat as training -> reset lstm states inbetween each batch
-                        mu, scale = self.model(x_batch_val, training = True) 
+                        mu, scale = self.model(x_batch_val, training=True)
 
-                        # softplus parameters 
+                        # softplus parameters
                         scale = softplus(scale)
                         if self.ts_obj.count_data:
                             mu = softplus(mu)
@@ -235,13 +295,17 @@ class DeepARLearner:
 
                 # logging
                 eval_mae_result = eval_mae.result()
-                logger.info(f'Validation took {round(time.time() - start_time, 0)}s')
-                logger.info(f'Epoch {epoch}: Val loss on {steps_per_epoch} steps: {eval_loss_avg.result()}')
-                logger.info(f'Epoch {epoch}: Val MAE: {eval_mae_result}, RMSE: {eval_rmse.result()}')
+                logger.info(f"Validation took {round(time.time() - start_time, 0)}s")
+                logger.info(
+                    f"Epoch {epoch}: Val loss on {steps_per_epoch} steps: {eval_loss_avg.result()}"
+                )
+                logger.info(
+                    f"Epoch {epoch}: Val MAE: {eval_mae_result}, RMSE: {eval_rmse.result()}"
+                )
                 if self.tb:
-                    tf.summary.scalar('val_loss', eval_loss_avg.result(), epoch)
-                    tf.summary.scalar('val_mae', eval_mae_result, epoch)
-                    tf.summary.scalar('val_rmse', eval_rmse.result(), epoch)
+                    tf.summary.scalar("val_loss", eval_loss_avg.result(), epoch)
+                    tf.summary.scalar("val_mae", eval_mae_result, epoch)
+                    tf.summary.scalar("val_rmse", eval_rmse.result(), epoch)
                 new_metric = eval_mae_result
 
                 # early stopping
@@ -256,25 +320,34 @@ class DeepARLearner:
                 if early_stopping_cb(epoch_loss_avg_result):
                     break
                 new_metric = epoch_loss_avg_result
-            
+
             # update best_metric and save new checkpoint if improvement
             if new_metric < best_metric:
                 best_metric = new_metric
                 if filepath is not None:
-                    checkpointer.save(file_prefix = filepath)
+                    checkpointer.save(file_prefix=filepath)
                 else:
-                    self.save_weights('model_best_weights.h5')
+                    self.save_weights("model_best_weights.h5")
 
             # reset epoch loss metric
             epoch_loss_avg.reset_states()
 
         # load in best weights before returning if not saving to filepath
         if filepath is None:
-           self.load_weights('model_best_weights.h5')
+            self.load_weights("model_best_weights.h5")
         return best_metric, epoch + 1
 
-    def fit(self, checkpoint_dir = None, validation = True, steps_per_epoch=50, epochs=100, early_stopping = True,
-        stopping_patience = 5, stopping_delta = 1, tensorboard = True):
+    def fit(
+        self,
+        checkpoint_dir=None,
+        validation=True,
+        steps_per_epoch=50,
+        epochs=100,
+        early_stopping=True,
+        stopping_patience=5,
+        stopping_delta=1,
+        tensorboard=True,
+    ):
 
         """ fits DeepAR model for steps_per_epoch * epochs iterations
                 :param checkpoint_dir: directory to save checkpoint and tensorboard files
@@ -293,7 +366,7 @@ class DeepARLearner:
         self.epochs = epochs
 
         # try to load previously saved checkpoint from filepath
-        checkpointer = tf.train.Checkpoint(optimizer = self.optimizer, model = self.model)
+        checkpointer = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
         if checkpoint_dir is not None:
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
@@ -311,40 +384,109 @@ class DeepARLearner:
         self.tb = tensorboard
 
         # train generator
-        train_gen = train_ts_generator(self.model, 
+        train_gen = train_ts_generator(
+            self.model,
             self.ts_obj,
             self.batch_size,
-            self.train_window, 
-            verbose=self.verbose, 
-            padding_value=0)
+            self.train_window,
+            verbose=self.verbose,
+        )
 
         # validation generator
-        if validation:            
-            val_gen = train_ts_generator(self.model, 
+        if validation:
+            val_gen = train_ts_generator(
+                self.model,
                 self.ts_obj,
-                self.batch_size, 
-                self.train_window, 
-                verbose=self.verbose, 
-                padding_value=0, 
-                val_set=True)
+                self.batch_size,
+                self.train_window,
+                verbose=self.verbose,
+                val_set=True,
+            )
         else:
             val_gen = None
 
         # Iterate over epochs.
-        return self._training_loop(filepath,
+        return self._training_loop(
+            filepath,
             checkpointer,
-            train_gen, 
-            val_gen, 
+            train_gen,
+            val_gen,
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
             early_stopping=early_stopping,
             stopping_patience=stopping_patience,
-            stopping_delta=stopping_delta)
+            stopping_delta=stopping_delta,
+        )
 
-    def predict(self, test_ts_obj, horizon = None, samples = 1, include_all_training = False):
+    def _add_prev_target(self, x_test, prev_target):
+        x_test_new = x_test[0][:, :1, -1:].assign(prev_target)
+        return [x_test_new, x_test[1]]
+
+    def _softplus(self, mu, scale):
+        """
+        private util function that applies softplus transformation to various parameters
+            depending on type of data 
+        """
+        scale = softplus(scale)
+        if self.ts_obj.count_data:
+            mu = softplus(mu)
+        return mu, scale
+
+    def _unscale(self, mu, scale, test_ts_obj):
+        """
+        private util function that unscales predictions 
+        """
+        lookup_table = build_tf_lookup(self.ts_obj.target_means)
+        return unscale(mu, scale, test_ts_obj.scale_keys, lookup_table)
+
+    def _squeeze(self, mu, scale, num_test_groups=1, squeeze_dims=[2]):
+        """
+        private util function that squeezes predictions along certain dimensions depending on whether
+            we are predicting in-sample or out-of-sample
+        """
+        squeezed_mu = tf.squeeze(mu[:num_test_groups], squeeze_dims)
+        squeezed_scale = tf.squeeze(scale[:num_test_groups], squeeze_dims)
+        return squeezed_mu, squeezed_scale
+
+    def _negative_binomial(self, mu, scale, samples = 1):
+        """
+        private util function that draws n samples from a negative binomial distribution parameterized 
+            by mu and scale parameters
+
+            based on implementation from GluonTS library: 
+            https://gluon-ts.mxnet.io/_modules/gluonts/distribution/neg_binomial.html#NegativeBinomial
+        """
+        tol = 1e-5
+        r = 1.0 / scale
+        theta = scale * mu
+        r = tf.math.minimum(tf.math.maximum(tol, r), 1e10)
+        theta = tf.math.minimum(tf.math.maximum(tol, theta), 1e10)
+        x = np.min(np.random.gamma(r, theta, samples), 1e6)
+        return np.random.poisson(x, samples)
+
+    def _draw_samples(self, mu_tensor, scale_tensor, point_estimate = False, samples = 1):
+        """
+        private util function that draws samples from appropriate distribution
+        """
+        # shape : [# test groups, samples]
+        if point_estimate:
+            return [np.repeat(mu, samples) for mu in mu_tensor]
+        elif self.ts_obj.count_data:
+            return [
+                list(self._negative_binomial(mu, scale, samples))
+                for mu, scale in zip(mu_tensor, scale_tensor)
+            ]
+        else:
+            return [
+                list(np.random.normal(mu, scale, samples))
+                for mu, scale in zip(mu_tensor, scale_tensor)
+            ]
+
+    def predict(self, test_ts_obj, point_estimate = True, horizon=None, samples=1, include_all_training=False):
         """ 
         predict horizon steps into the future
-            :param test_ts_obj: time series object for prediction
+            :param test_ts_obj: time series object for prediction 
+            :param point_estimate: if True, always sample mean of distributions, otherwise sample from (mean, scale) parameters
             :param horzion: optional, can specify prediction horizon into future
             :param samples: how many samples to draw to calculate confidence interavls 
                 (raw samples returned)
@@ -352,79 +494,96 @@ class DeepARLearner:
                     of training data, alternative is from t_0 - train_window
             :return: predictions [# unique test groups, horizon, # samples]
         """
-        
+
         assert samples > 0, "The number of samples to draw must be positive"
 
         # test generator
-        test_gen = test_ts_generator(self.model,
+        test_gen = test_ts_generator(
+            self.model,
             test_ts_obj,
             self.batch_size,
-            self.train_window, 
+            self.train_window,
             include_all_training=include_all_training,
-            verbose=self.verbose
+            verbose=self.verbose,
         )
 
         # reset lstm states before prediction
-        self.model.get_layer('lstm').reset_states()
-        self.model.get_layer('lstm').reset_dropout_mask()
-        self.model.get_layer('lstm').reset_recurrent_dropout_mask()
+        self.model.get_layer("lstm").reset_states()
+        self.model.get_layer("lstm").reset_dropout_mask()
+        self.model.get_layer("lstm").reset_recurrent_dropout_mask()
 
-        # make sure horizon is legitimate value 
-        # todo grouped horizon!
-        if horizon is None or horizon > test_ts_obj.data.shape[0]:
+        # make sure horizon is legitimate value
+        if horizon is None or horizon > test_ts_obj.horizon:
             horizon = test_ts_obj.horizon
-    
-        # forward 
+        logger.debug(f"horizon: {horizon}")
+
+        # forward
         test_samples = [[] for _ in range(len(test_ts_obj.test_groups))]
         start_time = time.time()
+
         for batch_idx, batch in enumerate(test_gen):
-            
+
             x_test, horizon_idx = batch
-            if horizon_idx is None:
+            if horizon_idx is None or horizon_idx > horizon:
                 break
-            if horizon_idx > horizon:
-                break
-            
+
             # don't need to replace for first test batch bc have tgt from last training example
             if horizon_idx > 1:
-                # add one sample from previous predictions to test batches 
+                # add one sample from previous predictions to test batches
                 # all dim 0, first row of dim 1, last col of dim 3
-                x_test_new = x_test[0][:, :1, -1:].assign(mu)
-                x_test = [x_test_new, x_test[1]]
+                x_test = self._add_prev_target(x_test, mu[:, :1, :])
 
-            # get first column predictions (squeeze 1st dim - horizon)
+            # make predictions
             mu, scale = self.model(x_test)
-            mu, scale = mu[:, :1, :], scale[:, :1, :]
+            mu, scale = self._softplus(mu, scale)
 
-            # softplus parameters 
-            scale = softplus(scale)
-            if self.ts_obj.count_data:
-                mu = softplus(mu)
-            
+            # unscale
+            scaled_mu, scaled_scale = self._unscale(mu, scale, test_ts_obj)
+
+            # take mu for in-sample predictions (ancestral sampling)
+            if horizon_idx <= 0:
+                if horizon_idx % 5 == 0:
+                    logger.info(f'Making in-sample predictions with ancestral sampling. {-horizon_idx} batches remaining')
+
+                # slice at number of unique ts and squeeze 2nd dim - output_dim)
+                scaled_mu, scaled_scale = self._squeeze(
+                    scaled_mu,
+                    scaled_scale,
+                    num_test_groups=len(test_ts_obj.test_groups),
+                )
+
+                for mu, scale, sample_list in zip(
+                    scaled_mu, scaled_scale, test_samples
+                ):
+                    draws = self._draw_samples(mu, scale, point_estimate = point_estimate, samples = samples)
+                    sample_list.extend(draws)
+
+
             # draw samples from learned distributions for test samples
-            if horizon_idx > 0:
-                
-                # unscale
-                lookup_table = build_tf_lookup(self.ts_obj.target_means)
-                scaled_mu, scaled_scale = unscale(mu, scale, test_ts_obj.scale_keys, lookup_table)
+            else:
+                if horizon_idx % 10 == 0:
+                    logger.info(f'Making future predictions. {horizon-horizon_idx} batches remaining')
+                    
+                # get first column predictions (squeeze 1st dim - horizon)
+                scaled_mu, scaled_scale = scaled_mu[:, :1, :], scaled_scale[:, :1, :]
 
                 # slice at number of unique ts and squeeze 1st dim - horizon, 2nd dim - output_dim)
-                scaled_mu = tf.squeeze(scaled_mu[:len(test_ts_obj.test_groups)], [1, 2])
-                scaled_scale = tf.squeeze(scaled_scale[:len(test_ts_obj.test_groups)], [1, 2])
+                squeezed_mu, squeezed_scale = self._squeeze(
+                    scaled_mu,
+                    scaled_scale,
+                    num_test_groups=len(test_ts_obj.test_groups),
+                    squeeze_dims=[1, 2],
+                )
 
-                # sample from learned distribution
-                # shape : [# test groups, samples]
-                if self.ts_obj.count_data:
-                    draws = [list(np.random.negative_binomial(mu, scale, samples)) for mu, scale in zip(scaled_mu, scaled_scale)]
-                else:
-                    draws = [list(np.random.normal(mu, scale, samples)) for mu, scale in zip(scaled_mu, scaled_scale)]
-
-                # concatenate 
+                # concatenate
+                draws = self._draw_samples(squeezed_mu, squeezed_scale, point_estimate = point_estimate, samples = samples)
                 for draw_list, sample_list in zip(draws, test_samples):
                     sample_list.append(draw_list)
 
-        logger.info(f'Inference ({samples} sample(s), {horizon} timesteps) took {round(time.time() - start_time, 0)}s')
-        
+        logger.info(
+            f"Inference ({samples} sample(s), {horizon} timesteps) took {round(time.time() - start_time, 0)}s"
+        )
+
         # Shape [# test_groups, horizon, samples]
         # TODO [# test_groups, horizon, samples, output_dim] not supported yet
         return np.array(test_samples)
