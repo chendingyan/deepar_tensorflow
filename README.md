@@ -14,6 +14,22 @@ Influenced by these two open-source implementations: https://github.com/arrigoni
 
 3. **loss.py**: contains custom *GaussianLogLikelihood* loss for real data and *NegativeBinomialLogLikelihood* loss for positive count data. Both losses support masking and inverse scaling per Salinas et al. 
 
+<!-- ## TODO
+    -CI / Weights
+    -ACLED
+    -PHEM window size nan training 
+    -Multiple Targets (VAR)
+    -DAR: 
+        lower range on early stopping delta?
+        clip gradients
+        multiple lstm layers
+        batch size smaller for testing + training (sequential preds, concatenate, timing?)
+        multiple targets
+        performance review - what are bottlenecks
+        lr scheduling
 
+        added lagged value (multiple?) according to frequency of the data 
+        multiple embeddings!
+        attention? -->
 
 

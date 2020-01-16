@@ -4,6 +4,7 @@ from tensorflow.keras.losses import Loss, Reduction
 from tensorflow.keras.activations import softplus
 import numpy as np
 
+
 def build_tf_lookup(scale_data):
     """
     create and return tf hash table mapping scale keys to scale values 
@@ -11,11 +12,12 @@ def build_tf_lookup(scale_data):
     """
     return tf.lookup.StaticHashTable(
         initializer=tf.lookup.KeyValueTensorInitializer(
-            keys=tf.constant(scale_data.index.values, dtype = tf.int32),
-            values=tf.constant(scale_data.values, dtype = tf.float32),
+            keys=tf.constant(scale_data.index.values, dtype=tf.int32),
+            values=tf.constant(scale_data.values, dtype=tf.float32),
         ),
-        default_value=tf.constant(-1, dtype = tf.float32),
+        default_value=tf.constant(-1, dtype=tf.float32),
     )
+
 
 def unscale(mu, scale, scale_keys, hash_table):
     """
@@ -32,15 +34,17 @@ def unscale(mu, scale, scale_keys, hash_table):
     scaled_sigma = tf.divide(scale, tf.sqrt(scale_values))
     return scaled_mu, scaled_sigma
 
+
 class GaussianLogLikelihood(Loss):
     """
     Custom GaussianLogLikelihood loss function
       :param mask_value: value in y_true that should be masked in loss (missing tgt in training set)
       :param name:
     """
-    def __init__(self, mask_value = -10000, name='gaussian_log_likelihood'):
-        
-        super(GaussianLogLikelihood, self).__init__(reduction=Reduction.AUTO, name = name)
+
+    def __init__(self, mask_value=-10000, name="gaussian_log_likelihood"):
+
+        super(GaussianLogLikelihood, self).__init__(reduction=Reduction.AUTO, name=name)
         self.mask_value = mask_value
 
     def _mask_loss(self, loss_term, y_true, mask_value):
@@ -61,10 +65,12 @@ class GaussianLogLikelihood(Loss):
         """
 
         mu, sigma = y_pred_bundle
-        batch_size = mu.shape[0] 
+        batch_size = mu.shape[0]
 
         # loss
-        loss_term = 0.5*tf.math.log(sigma) + 0.5*tf.divide(tf.square(y_true - mu), sigma)
+        loss_term = 0.5 * tf.math.log(sigma) + 0.5 * tf.divide(
+            tf.square(y_true - mu), sigma
+        )
 
         # mask
         masked_loss_term = self._mask_loss(loss_term, y_true, self.mask_value)
@@ -78,9 +84,12 @@ class NegativeBinomialLogLikelihood(Loss):
     Custom NegativeBinomialLogLikelihood loss function
       :param mask_value: value in y_true that should be masked in loss (missing tgt in training set)
     """
-    def __init__(self, mask_value = -10000, name='negative_binomial_log_likelihood'):
-        
-        super(NegativeBinomialLogLikelihood, self).__init__(reduction=Reduction.AUTO, name = name)
+
+    def __init__(self, mask_value=-10000, name="negative_binomial_log_likelihood"):
+
+        super(NegativeBinomialLogLikelihood, self).__init__(
+            reduction=Reduction.AUTO, name=name
+        )
         self.mask_value = mask_value
 
     def _mask_loss(self, loss_term, y_true, mask_value):
@@ -100,16 +109,22 @@ class NegativeBinomialLogLikelihood(Loss):
         """
 
         mu, alpha = y_pred_bundle
-        batch_size = mu.shape[0] 
+        batch_size = mu.shape[0]
 
         # loss
         alpha_y_pred = tf.multiply(alpha, mu)
         alpha_div = tf.divide(1.0, alpha)
         denom = tf.math.log(1 + alpha_y_pred)
-        log_loss = \
-            tf.math.lgamma(y_true + alpha_div) - tf.math.lgamma(y_true + 1.0) - tf.math.lgamma(alpha_div)
-        loss_term = \
-            log_loss - tf.divide(denom, alpha) + tf.multiply(y_true, tf.math.log(alpha_y_pred) - denom)
+        log_loss = (
+            tf.math.lgamma(y_true + alpha_div)
+            - tf.math.lgamma(y_true + 1.0)
+            - tf.math.lgamma(alpha_div)
+        )
+        loss_term = (
+            log_loss
+            - tf.divide(denom, alpha)
+            + tf.multiply(y_true, tf.math.log(alpha_y_pred) - denom)
+        )
         loss_term = -loss_term
 
         # mask
