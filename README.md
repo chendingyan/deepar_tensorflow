@@ -4,7 +4,7 @@ Influenced by these two open-source implementations: https://github.com/arrigoni
 
 **deepar/dataset**: 
 
-1. **time_series.py**: contains *TimeSeries* and *TimeSeriesTest* objects that perform covariate augmentation, grouping, scaling, and standardization according to Salinas et al. The objects are also easy to integrate with the **D3M** AutoML DARPA primitive and piepline infrastructure (https://docs.datadrivendiscovery.org/).
+1. **time_series.py**: contains *TimeSeriesTrain* and *TimeSeriesTest* objects that perform covariate augmentation, grouping, scaling, and standardization according to Salinas et al. The objects are also easy to integrate with the **D3M** AutoML DARPA primitive and piepline infrastructure (https://docs.datadrivendiscovery.org/).
 
 **deepar/model**: 
 
@@ -15,21 +15,41 @@ Influenced by these two open-source implementations: https://github.com/arrigoni
 3. **loss.py**: contains custom *GaussianLogLikelihood* loss for real data and *NegativeBinomialLogLikelihood* loss for positive count data. Both losses support masking and inverse scaling per Salinas et al. 
 
 <!-- ## TODO
-    -CI / Weights
-    -ACLED
-    -PHEM window size nan training 
-    -Multiple Targets (VAR)
     -DAR: 
-        lower range on early stopping delta?
-        clip gradients
-        multiple lstm layers
-        batch size smaller for testing + training (sequential preds, concatenate, timing?)
-        multiple targets
-        performance review - what are bottlenecks
-        lr scheduling
 
-        added lagged value (multiple?) according to frequency of the data 
-        multiple embeddings!
-        attention? -->
+        EASY
+        clip gradients (Gluon - 10)
+        multiple lstm layers
+        lr scheduling (10^-3 halve after 300 batches if no improvement or exponential)
+        multivariate targets + categoricals
+
+        TRY TO REPRODUCE DeepAR / Gluon experiments on public datasets
+
+        EXPERIMENT
+        multiple embeddings, constraint on embeddings to respect hierarchical ordering!
+
+        Compare DeepAR 1 embedding, multiple embeddings, multiple constrained to Optimal Reconciliation approach on OR public datasets -> PAPER
+        If improved -> compare to multiple ts models. If not is there a way to use as constraint
+
+        NICE LIBRARY ADDITIONS
+        add multiple lagged seasonal values according to frequency of the data    
+        a) automatically select distribution that minimizes validation loss (include student's t)
+        b) loss term that increases variance to account for model misspecification
+        box-cox / differencing transform of z before modeling?
+
+        MORE EXPERIMENTS
+        generative loss component for p(x), non-targets, only if significant x
+
+        comparisons:
+        NPTS 
+        Deep state space
+        S2S (unknown horizon?)
+        same datasets from GluonTS paper
+
+    -ACLED    
+    -->
+
+
+    
 
 
