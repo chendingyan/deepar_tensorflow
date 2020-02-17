@@ -12,11 +12,8 @@ class LSTMResetStateful(LSTM):
 
     def call(self, inputs, mask = None, training = None):
         
-        #reset stateful lstm during training
         if training:
             self.reset_states()
-            self.reset_dropout_mask()
-            self.reset_recurrent_dropout_mask()
         
         return super(LSTMResetStateful, self).call(inputs, mask = mask, training = training)
 
