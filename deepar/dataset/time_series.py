@@ -17,21 +17,22 @@ logger = logging.getLogger(__name__)
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
+
 class TimeSeriesTrain(Dataset):
 
     def __init__(
-        self, 
-        pandas_df: pd.DataFrame, 
-        target_idx: int, 
-        timestamp_idx: int, 
-        grouping_idx: int = None, 
-        one_hot_indices: typing.List[int] = None, 
-        index_col: int = None, 
-        count_data: bool = False, 
-        negative_obs: int = 1, 
-        val_split: float = 0.2, 
-        freq: str = 'S', 
-        normalize_dates: bool = True
+            self,
+            pandas_df: pd.DataFrame,
+            target_idx: int,
+            timestamp_idx: int,
+            grouping_idx: int = None,
+            one_hot_indices: typing.List[int] = None,
+            index_col: int = None,
+            count_data: bool = False,
+            negative_obs: int = 1,
+            val_split: float = 0.2,
+            freq: str = 'S',
+            normalize_dates: bool = True
     ):
         """ prepares TimeSeriesTrain data object - augments data with covariates, standardizes data, encodes 
                 categorical variables (for embeddings in model), optionally splits into training and validation sets
@@ -77,7 +78,7 @@ class TimeSeriesTrain(Dataset):
         # set name of target variable
         if target_idx is None:
             raise ValueError('Must provide an index for a target column to instantiate this class')
-        self._data = self._data.rename(columns={col_names[target_idx]:'target'})
+        self._data = self._data.rename(columns={col_names[target_idx]: 'target'})
 
         # set mask value
         if count_data:
@@ -92,10 +93,10 @@ class TimeSeriesTrain(Dataset):
 
         # augment dataset with covariates
         self._time_name = self._sort_by_timestamp(col_names)
-        self._data = self._datetime_interpolation(self._data, 
-            self._data[self._time_name].iloc[-1], 
-            negative_offset = self._negative_obs
-        )
+        self._data = self._datetime_interpolation(self._data,
+                                                  self._data[self._time_name].iloc[-1],
+                                                  negative_offset=self._negative_obs
+                                                  )
         self._data = self._datetime_augmentation(self._data)
         self._age_augmentation()
 
@@ -118,12 +119,12 @@ class TimeSeriesTrain(Dataset):
         self._standardize(val_split)
 
         # store number of features and categorical count and target means
-        self._features = self._data.shape[1] - 2 # -3 :target, grouping name, datetime, +1 :prev target
+        self._features = self._data.shape[1] - 2  # -3 :target, grouping name, datetime, +1 :prev target
         self._count_data = count_data
 
     def _sort_by_timestamp(
-        self, 
-        col_names: typing.List[str]
+            self,
+            col_names: typing.List[str]
     ) -> str:
 
         """
@@ -137,23 +138,23 @@ class TimeSeriesTrain(Dataset):
         time_name = col_names[self._timestamp_idx]
 
         # sort data by time column
-        self._data = self._data.sort_values(by = time_name)
+        self._data = self._data.sort_values(by=time_name)
 
         # convert to pd datetime objects
         if isinstance(self._data[time_name].iloc[0], int):
-            self._data[time_name] = pd.to_datetime(self._data[time_name] - 1, unit = 'D')
+            self._data[time_name] = pd.to_datetime(self._data[time_name] - 1, unit='D')
             self._freq = 'D'
         elif isinstance(self._data[time_name].iloc[0], float):
-            self._data[time_name] = pd.to_datetime(self._data[time_name], unit = 's')
+            self._data[time_name] = pd.to_datetime(self._data[time_name], unit='s')
 
         return time_name
 
     def _datetime_interpolation(
-        self, 
-        df: pd.DataFrame, 
-        max_date: datetime, 
-        min_date: datetime = None, 
-        negative_offset: int = 0
+            self,
+            df: pd.DataFrame,
+            max_date: datetime,
+            min_date: datetime = None,
+            negative_offset: int = 0
     ) -> pd.DataFrame:
 
         """
@@ -184,14 +185,14 @@ class TimeSeriesTrain(Dataset):
                 df = df.drop(self._time_name, axis=1)
 
             # reindex
-            df_new = robust_reindex(df, 
-                min_date_group, 
-                max_date, 
-                freq = self._freq, 
-                normalize_dates = self._normalize_dates
-            )
+            df_new = robust_reindex(df,
+                                    min_date_group,
+                                    max_date,
+                                    freq=self._freq,
+                                    normalize_dates=self._normalize_dates
+                                    )
             df_new.insert(self._timestamp_idx, self._time_name, df_new.index.get_level_values(-1))
-            df_new = df_new.reset_index(drop = True)
+            df_new = df_new.reset_index(drop=True)
 
             # interpolate non-target columns
             if df.shape[0] > 1:
@@ -199,13 +200,13 @@ class TimeSeriesTrain(Dataset):
                     df_new.loc[:, df_new.columns != 'target'] = df_new.loc[:, df_new.columns != 'target'].interpolate()
                 except ValueError:
                     logger.debug('There are no NA target values for which linear interpolation makes sense')
-                df_new.loc[:, df_new.columns != 'target'] = df_new.loc[:, df_new.columns != 'target'].ffill().bfill()             
+                df_new.loc[:, df_new.columns != 'target'] = df_new.loc[:, df_new.columns != 'target'].ffill().bfill()
             else:
                 # edge case when new reindexed df only has one row
                 replace = [col for col in df_new.columns if col != self._time_name]
                 df_new.loc[:, replace] = df[replace].values[0]
 
-            new_dfs.append(df_new)  
+            new_dfs.append(df_new)
         return pd.concat(new_dfs)
 
     def _age_augmentation(self):
@@ -220,8 +221,8 @@ class TimeSeriesTrain(Dataset):
         self._train_set_ages['dummy_test_category'] = 0
 
     def _datetime_augmentation(
-        self, 
-        df: pd.DataFrame
+            self,
+            df: pd.DataFrame
     ) -> pd.DataFrame:
 
         """
@@ -244,10 +245,10 @@ class TimeSeriesTrain(Dataset):
         self._datetime_feat_ct = df.shape[1] - orig_cols
 
         return df
-        
+
     def _train_val_split(
-        self, 
-        val_split: float
+            self,
+            val_split: float
     ):
         """
         util function
@@ -275,11 +276,11 @@ class TimeSeriesTrain(Dataset):
 
         # softmax the distribution for sampling
         e_x = np.exp(scale_factors - np.max(scale_factors))
-        self._scale_factors_softmax = e_x / e_x.sum(axis = 0)
+        self._scale_factors_softmax = e_x / e_x.sum(axis=0)
 
     def _store_target_means(
-        self, 
-        val_split: float
+            self,
+            val_split: float
     ):
         """
         util function
@@ -301,10 +302,10 @@ class TimeSeriesTrain(Dataset):
             for group in self._val_data[self._grouping_name].unique():
                 if group not in self._train_data[self._grouping_name].unique():
                     self._target_means[group] = target_mean
-        
+
     def _mask_missing_targets(
-        self, 
-        df: pd.DataFrame
+            self,
+            df: pd.DataFrame
     ):
         """
         util function
@@ -320,8 +321,8 @@ class TimeSeriesTrain(Dataset):
                 self._missing_tgt_vals[key] = [df['_age'].iloc[idx]]
 
     def _standardize(
-        self, 
-        val_split: float
+            self,
+            val_split: float
     ):
         """ 
         util function
@@ -331,15 +332,17 @@ class TimeSeriesTrain(Dataset):
         covariate_names = ['target', self._grouping_name, self._time_name]
         covariate_mask = [False if col_name in covariate_names else True for col_name in self._data.columns]
         self._scaler = StandardScaler()
-        self._train_data.loc[:, covariate_mask] = self._scaler.fit_transform(self._train_data.loc[:, covariate_mask].astype('float'))
-        
+        self._train_data.loc[:, covariate_mask] = self._scaler.fit_transform(
+            self._train_data.loc[:, covariate_mask].astype('float'))
+
         # record locations of missing target values
         self._missing_tgt_vals = {}
         self._mask_missing_targets(self._train_data)
 
         if val_split != 0:
             self._val_data = self._val_data.reset_index(drop=True)
-            self._val_data.loc[:, covariate_mask] = self._scaler.transform(self._val_data.loc[:, covariate_mask].astype('float'))
+            self._val_data.loc[:, covariate_mask] = self._scaler.transform(
+                self._val_data.loc[:, covariate_mask].astype('float'))
 
             # record locations of missing target values
             self._mask_missing_targets(self._val_data)
@@ -348,9 +351,9 @@ class TimeSeriesTrain(Dataset):
         self._data.loc[:, covariate_mask] = self._scaler.transform(self._data.loc[:, covariate_mask].astype('float'))
 
     def _pad_ts(
-        self, 
-        pandas_df: pd.DataFrame, 
-        desired_len: int
+            self,
+            pandas_df: pd.DataFrame,
+            desired_len: int
     ) -> pd.DataFrame:
 
         """
@@ -362,12 +365,12 @@ class TimeSeriesTrain(Dataset):
         """
 
         # TODO CHECK THAT THIS INTERPOLATES ONE HOTS CORRECTLY
-        padding_df = self._datetime_interpolation(pandas_df, 
-            pandas_df[self._time_name].iloc[-1], 
-            negative_offset = desired_len - pandas_df.shape[0]
-        )
+        padding_df = self._datetime_interpolation(pandas_df,
+                                                  pandas_df[self._time_name].iloc[-1],
+                                                  negative_offset=desired_len - pandas_df.shape[0]
+                                                  )
         padding_df = self._datetime_augmentation(padding_df)
-        
+
         # standardize ONLY datetime covariates N(0,1) others interpolated and thus already standardized
         covariate_names = ['target', 'prev_target', self._grouping_name, self._time_name]
         covariate_mask = [False if col_name in covariate_names else True for col_name in padding_df.columns]
@@ -379,9 +382,9 @@ class TimeSeriesTrain(Dataset):
         return padding_df
 
     def _sample_ts(
-        self, 
-        pandas_df: pd.DataFrame, 
-        desired_len: int
+            self,
+            pandas_df: pd.DataFrame,
+            desired_len: int
     ) -> pd.DataFrame:
 
         """ sample window from time series from https://github.com/arrigonialberto86/deepar
@@ -394,7 +397,7 @@ class TimeSeriesTrain(Dataset):
         Returns:
             pd.DataFrame -- df of sampled window from time series
         """
-        
+
         if pandas_df.shape[0] < desired_len:
             raise ValueError('Desired sample length is greater than df row len')
         if pandas_df.shape[0] == desired_len:
@@ -402,14 +405,14 @@ class TimeSeriesTrain(Dataset):
 
         start_index = np.random.choice([i for i in range(0, pandas_df.shape[0] - desired_len)])
 
-        return pandas_df.iloc[start_index: start_index+desired_len, ]
+        return pandas_df.iloc[start_index: start_index + desired_len, ]
 
     def _scale_prev_target_col(
-        self, 
-        df: pd.DataFrame, 
-        means: pd.Series
+            self,
+            df: pd.DataFrame,
+            means: pd.Series
     ) -> pd.DataFrame:
-        
+
         """
         util function
             scale previous target column by target means
@@ -418,14 +421,14 @@ class TimeSeriesTrain(Dataset):
             df.loc[:, 'prev_target'] = means
         else:
             df.loc[:, 'prev_target'] = df['prev_target'] / means
-        
+
         return df
 
     def _add_prev_target_col(
-        self, 
-        df: pd.DataFrame, 
-        target_means: pd.Series, 
-        train_df: pd.DataFrame = None
+            self,
+            df: pd.DataFrame,
+            target_means: pd.Series,
+            train_df: pd.DataFrame = None
     ) -> pd.DataFrame:
 
         """
@@ -434,11 +437,11 @@ class TimeSeriesTrain(Dataset):
         """
 
         df = df.reset_index(drop=True)
-        means = target_means[df[self._grouping_name]].reset_index(drop = True)
+        means = target_means[df[self._grouping_name]].reset_index(drop=True)
         if train_df is None:
 
             # add feature column for previous output value (z_{t-1})
-            df.loc[:,'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
+            df.loc[:, 'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
 
             # scale
             df = self._scale_prev_target_col(df, means)
@@ -447,31 +450,32 @@ class TimeSeriesTrain(Dataset):
             # validation set
             if 'target' in df.columns:
                 if train_df.shape[0] > 0:
-                    df.loc[:, 'prev_target'] = train_df['target'].dropna().tail(1).append(df['target'].iloc[:-1], ignore_index=True)
+                    df.loc[:, 'prev_target'] = train_df['target'].dropna().tail(1).append(df['target'].iloc[:-1],
+                                                                                          ignore_index=True)
                 else:
-                    df.loc[:,'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
+                    df.loc[:, 'prev_target'] = pd.Series([0]).append(df['target'].iloc[:-1], ignore_index=True)
 
             # test set
             else:
                 df.loc[:, 'prev_target'] = \
-                    train_df['target'].dropna().tail(1).repeat(repeats = df.shape[0]).reset_index(drop = True)
+                    train_df['target'].dropna().tail(1).repeat(repeats=df.shape[0]).reset_index(drop=True)
 
             # scale
             df = self._scale_prev_target_col(df, means)
 
         # interpolate
-        df.loc[:,'prev_target'] = df['prev_target'].interpolate(limit_direction = 'both')
+        df.loc[:, 'prev_target'] = df['prev_target'].interpolate(limit_direction='both')
 
         return df
 
     def _sample_missing_prev_tgts(
-        self, 
-        df: pd.DataFrame, 
-        full_df_ages: pd.Series, 
-        model: Model, 
-        window_size: int, 
-        batch_size: int, 
-        training: bool = True
+            self,
+            df: pd.DataFrame,
+            full_df_ages: pd.Series,
+            model: Model,
+            window_size: int,
+            batch_size: int,
+            training: bool = True
     ) -> pd.DataFrame:
 
         """ sample missing previous target values from current model parameters
@@ -495,16 +499,20 @@ class TimeSeriesTrain(Dataset):
         # sample missing 'targets' from current model parameters (for 'prev_targets')
         category = df[self._grouping_name].iloc[0]
         if category in self._missing_tgt_vals.keys():
-            
+
             # get indices from full df age column to check for missing values (because missing target
             # could exist in previous row that wasn't sampled)
             age_list = full_df_ages.reindex([i - 1 for i in df.index.values.tolist()])
 
             if not set(self._missing_tgt_vals[category]).isdisjoint(age_list) and df.shape[0] == window_size:
-                drop_list = [col for col in df.columns if col == self._grouping_name or col == self._time_name or col == 'target']
-                cont = tf.constant(np.repeat(df.drop(drop_list, 1).values.reshape(1, window_size, -1), batch_size, axis = 0), dtype = tf.float32)
-                cat = tf.constant(np.repeat(df[self._grouping_name].values.reshape(1, window_size), batch_size, axis = 0), dtype = tf.float32)
-                preds = model([cont, cat], training = training)[0][0]
+                drop_list = [col for col in df.columns if
+                             col == self._grouping_name or col == self._time_name or col == 'target']
+                cont = tf.constant(
+                    np.repeat(df.drop(drop_list, 1).values.reshape(1, window_size, -1), batch_size, axis=0),
+                    dtype=tf.float32)
+                cat = tf.constant(np.repeat(df[self._grouping_name].values.reshape(1, window_size), batch_size, axis=0),
+                                  dtype=tf.float32)
+                preds = model([cont, cat], training=training)[0][0]
 
                 # refill indices (add 1 for each negative observation, i.e. before start of series)
                 refill_indices = df.index[age_list.isin(self._missing_tgt_vals[category])]
@@ -518,14 +526,14 @@ class TimeSeriesTrain(Dataset):
         return df
 
     def next_batch(
-        self, 
-        model: Model,
-        batch_size: int, 
-        window_size: int, 
-        verbose: bool=False, 
-        val_set: bool = False
+            self,
+            model: Model,
+            batch_size: int,
+            window_size: int,
+            verbose: bool = False,
+            val_set: bool = False
     ) -> typing.Tuple[typing.List[tf.Tensor], tf.Tensor, tf.Tensor]:
-        
+
         """ gets next batch of training data
         
         Arguments:
@@ -551,8 +559,8 @@ class TimeSeriesTrain(Dataset):
             cat_samples = np.random.choice(self._val_data[self._grouping_name].unique(), batch_size)
             data = self._val_data
         else:
-            cat_samples = np.random.choice(self._train_data[self._grouping_name].unique(), batch_size, 
-                p = self._scale_factors_softmax)
+            cat_samples = np.random.choice(self._train_data[self._grouping_name].unique(), batch_size,
+                                           p=self._scale_factors_softmax)
             data = self._train_data
 
         sampled = []
@@ -562,8 +570,8 @@ class TimeSeriesTrain(Dataset):
 
             # add 'prev_target' column for this category
             if val_set:
-                cat_data = self._add_prev_target_col(cat_data, self._target_means, 
-                    self._train_data[self._train_data[self._grouping_name] == cat])
+                cat_data = self._add_prev_target_col(cat_data, self._target_means,
+                                                     self._train_data[self._train_data[self._grouping_name] == cat])
             else:
                 cat_data = self._add_prev_target_col(cat_data, self._target_means)
             cat_data.loc[:, 'target'] = cat_data['target'].fillna(self._mask_value)
@@ -571,40 +579,40 @@ class TimeSeriesTrain(Dataset):
             # sample window from time series
             if cat_data.shape[0] > window_size:
                 sampled_cat_data = self._sample_ts(pandas_df=cat_data,
-                                                    desired_len=window_size)
+                                                   desired_len=window_size)
             else:
                 sampled_cat_data = data
 
             # sample missing 'targets' from current model parameters (for 'prev_targets')
             sampled_cat_data = self._sample_missing_prev_tgts(
-                sampled_cat_data, 
-                cat_data['_age'], 
-                model, 
-                window_size, 
+                sampled_cat_data,
+                cat_data['_age'],
+                model,
+                window_size,
                 batch_size
             )
-            
+
             sampled.append(sampled_cat_data)
         data = pd.concat(sampled)
-        
+
         cont_inputs = tf.constant(
             data.drop(
-                ['target', self._grouping_name, self._time_name], 
+                ['target', self._grouping_name, self._time_name],
                 1
-            ).values.reshape(batch_size, window_size, -1), 
-            dtype = tf.float32
+            ).values.reshape(batch_size, window_size, -1),
+            dtype=tf.float32
         )
         cat_inputs = tf.constant(
-            data[self._grouping_name].values.reshape(batch_size, window_size), 
-            dtype = tf.float32
+            data[self._grouping_name].values.reshape(batch_size, window_size),
+            dtype=tf.float32
         )
         cat_labels = tf.constant(
-            cat_samples.reshape(batch_size, 1), 
-            dtype = tf.int32
+            cat_samples.reshape(batch_size, 1),
+            dtype=tf.int32
         )
         targets = tf.constant(
-            data['target'].values.reshape(batch_size, window_size, 1), 
-            dtype = tf.float32
+            data['target'].values.reshape(batch_size, window_size, 1),
+            dtype=tf.float32
         )
 
         return [cont_inputs, cat_inputs], cat_labels, targets
@@ -654,7 +662,7 @@ class TimeSeriesTrain(Dataset):
     @property
     def normalize_dates(self):
         return self._normalize_dates
-    
+
     @property
     def unique_cats(self):
         return self._unique_cats
@@ -700,10 +708,10 @@ class TimeSeriesTrain(Dataset):
 class TimeSeriesTest(TimeSeriesTrain):
 
     def __init__(
-        self, 
-        train_ts_obj: TimeSeriesTrain, 
-        pandas_df: pd.DataFrame = None,
-        target_idx: int = None
+            self,
+            train_ts_obj: TimeSeriesTrain,
+            pandas_df: pd.DataFrame = None,
+            target_idx: int = None
     ):
         """ prepares TimeSeriesTest data object - augments test data with covariates, standardizes test data, encodes 
                 test categorical variables (for embeddings in model), asserts compatibility with TimeSeriesTrain object, 
@@ -716,7 +724,7 @@ class TimeSeriesTest(TimeSeriesTrain):
             pandas_df {pd.DataFrame} -- df of test time series and covariates (default: {None})
             target_idx {int} -- index of target column if one exists (default: {None})
         """
-        
+
         self._data = pandas_df
 
         # indices of special columns must be same as train object bc of scaling transformation
@@ -743,9 +751,9 @@ class TimeSeriesTest(TimeSeriesTrain):
         self._batch_test_data_prepared = False
 
     def _preprocess_new_test_data(
-        self, 
-        target_idx: int, 
-        train_ts_obj: TimeSeriesTrain
+            self,
+            target_idx: int,
+            train_ts_obj: TimeSeriesTrain
     ):
         """ util function to preprocess new test data if it exists
         """
@@ -756,15 +764,15 @@ class TimeSeriesTest(TimeSeriesTrain):
 
         # delete target column if one exists (not needed for test)
         if target_idx is not None:
-            self._data = self._data.drop(col_names[target_idx], axis=1)      
+            self._data = self._data.drop(col_names[target_idx], axis=1)
 
             # update other indices    
             if self._timestamp_idx > target_idx:
                 self._timestamp_idx -= 1
             if self._grouping_idx > target_idx:
-                self._grouping_idx -= 1  
+                self._grouping_idx -= 1
 
-        # delete index column if one exists (absolute position information only available through covariates)
+                # delete index column if one exists (absolute position information only available through covariates)
         if train_ts_obj.index_col is not None:
             self._data = self._data.drop(col_names[train_ts_obj.index_col], axis=1)
 
@@ -782,8 +790,8 @@ class TimeSeriesTest(TimeSeriesTrain):
         # datetime features   
         max_date = self._data.groupby(self._grouping_name)[self._time_name].agg('max').max()
         min_date_test = self._train_ts_obj._data[self._time_name].max() + robust_timedelta(1, self._freq)
-        
-        self._data = self._datetime_interpolation(self._data, max_date, min_date = min_date_test)
+
+        self._data = self._datetime_interpolation(self._data, max_date, min_date=min_date_test)
         self._data = self._datetime_augmentation(self._data)
         self._age_augmentation(train_ts_obj.train_set_ages)
 
@@ -792,12 +800,13 @@ class TimeSeriesTest(TimeSeriesTrain):
             self._horizon = self._data.groupby(self._grouping_name)['_age'].count().max()
         else:
             self._horizon = 0
-        
+
         # standardize covariates N(0,1)
         covariate_names = [self._grouping_name, self._time_name]
         covariate_mask = [False if col_name in covariate_names else True for col_name in self._data.columns]
         if self._data.shape[0] > 0:
-            self._data.loc[:, covariate_mask] = self._scaler.transform(self._data.loc[:, covariate_mask].astype('float'))
+            self._data.loc[:, covariate_mask] = self._scaler.transform(
+                self._data.loc[:, covariate_mask].astype('float'))
 
         # assert compatibility with training TimeSeriesTrain object after processing
         assert self._data.shape[1] - 1 == train_ts_obj.features, \
@@ -834,11 +843,11 @@ class TimeSeriesTest(TimeSeriesTrain):
         return super(TimeSeriesTest, self)._one_hot_padding(*args, **kwargs)
 
     def _prepare_batched_test_data(
-        self, 
-        batch_size: int, 
-        window_size: int, 
-        include_all_training: bool = False, 
-        verbose: bool = False
+            self,
+            batch_size: int,
+            window_size: int,
+            include_all_training: bool = False,
+            verbose: bool = False
     ):
         """ Split data into batches of window_size for stateful inference
         
@@ -850,24 +859,25 @@ class TimeSeriesTest(TimeSeriesTrain):
             include_all_training {bool} -- whether to include all training data in prep of batches (default: {False})
             verbose {bool} -- (default: {False})
         """
-        
+
         if include_all_training:
             max_train_age = self._train_ts_obj._data.groupby(self._train_ts_obj.grouping_name).size().max()
             if (max_train_age - self._train_ts_obj.negative_obs) % window_size != 0:
-                max_train_age = ((max_train_age - self._train_ts_obj.negative_obs) // window_size) * window_size + window_size
+                max_train_age = ((
+                                         max_train_age - self._train_ts_obj.negative_obs) // window_size) * window_size + window_size
         else:
             max_train_age = window_size
 
         # interpolate all training set series from same min date (that supports window size)
         self._train_ts_obj._data = self._train_ts_obj._data.groupby(self._grouping_name).apply(
             lambda df: self._pad_ts(
-                df, 
+                df,
                 max_train_age
             )
-        ).reset_index(drop = True)
+        ).reset_index(drop=True)
 
         # calculate # train batches
-        self._train_batch_ct = max_train_age // window_size 
+        self._train_batch_ct = max_train_age // window_size
 
         # calculate number of iterations -- if batch_size < number of series in test df, 
         # we need to run multiple sequential iterations through time (one for each batch)
@@ -880,11 +890,11 @@ class TimeSeriesTest(TimeSeriesTrain):
             # series category doesn't exist in training set
             if cat in self._new_test_groups:
                 train_data = pd.DataFrame(
-                    {col: self._train_ts_obj.padding_value for col in self._data.columns}, 
+                    {col: self._train_ts_obj.padding_value for col in self._data.columns},
                     index=[i for i in range(max_train_age)]
                 )
                 train_data = self._add_prev_target_col(train_data, self._train_ts_obj.target_means)
-            
+
             else:
                 st = time.time()
                 enc_cat = self._train_ts_obj.label_encoder.transform([cat])[0]
@@ -903,36 +913,37 @@ class TimeSeriesTest(TimeSeriesTrain):
                 test_data = self._data[self._data[self._grouping_name] == cat]
                 if cat in self._new_test_groups:
                     test_data[self._grouping_name] = 'dummy_test_category'
-                test_data[self._grouping_name] = self._train_ts_obj.label_encoder.transform(test_data[self._grouping_name])
-                
+                test_data[self._grouping_name] = self._train_ts_obj.label_encoder.transform(
+                    test_data[self._grouping_name])
+
                 # add prev target column
                 test_data = self._add_prev_target_col(
-                    test_data, 
-                    self._train_ts_obj.target_means, 
-                    train_df = train_data
+                    test_data,
+                    self._train_ts_obj.target_means,
+                    train_df=train_data
                 )
 
                 # append test data, drop 'target' col from training data
                 prepped_data = pd.concat(
                     [train_data.drop('target', axis=1), test_data]
-                ).reset_index(drop = True)
+                ).reset_index(drop=True)
 
             else:
                 prepped_data = train_data
             data.append(prepped_data)
-            
+
         self._prepped_data = data
         self._batch_test_data_prepared = True
         self._batch_idx = 0
 
     def next_batch(
-        self, 
-        model: Model, 
-        batch_size: int, 
-        window_size: int, 
-        include_all_training: bool = False,
-        verbose: bool=False
-        
+            self,
+            model: Model,
+            batch_size: int,
+            window_size: int,
+            include_all_training: bool = False,
+            verbose: bool = False
+
     ) -> typing.Tuple[typing.List[tf.Tensor], tf.Tensor, int, int]:
 
         """ Split data into batches of window_size
@@ -953,13 +964,12 @@ class TimeSeriesTest(TimeSeriesTrain):
                 prediction_horizon_index, 
                 iteration_index
         """
-     
 
         if not self._batch_test_data_prepared:
-            self._prepare_batched_test_data(batch_size, 
-                window_size, 
-                include_all_training = include_all_training, 
-                verbose = verbose)
+            self._prepare_batched_test_data(batch_size,
+                                            window_size,
+                                            include_all_training=include_all_training,
+                                            verbose=verbose)
 
         # if done with full sequence through time for this batch
         if self._batch_idx == self._horizon + self._train_batch_ct:
@@ -969,7 +979,7 @@ class TimeSeriesTest(TimeSeriesTrain):
         # return None if no more iterations
         if self._iterations >= self._total_iterations and self._iterations > 0:
             return (None, None, None, None)
-        
+
         # grab current batch
         df_start_idx = self._iterations * batch_size
         df_stop_idx = (self._iterations + 1) * batch_size
@@ -978,20 +988,20 @@ class TimeSeriesTest(TimeSeriesTrain):
         else:
             batch_start_idx = self._batch_idx * window_size
         batch_data = [
-            df.iloc[batch_start_idx:batch_start_idx + window_size, :] 
+            df.iloc[batch_start_idx:batch_start_idx + window_size, :]
             for df in self._prepped_data[df_start_idx:df_stop_idx]
         ]
 
         # sample missing 'targets' from current model parameters (for 'prev_targets')
         batch_data = [
             self._sample_missing_prev_tgts(
-                b_data, 
-                full_df['_age'], 
-                model, 
-                window_size, 
+                b_data,
+                full_df['_age'],
+                model,
+                window_size,
                 batch_size,
-                training = False
-            ) 
+                training=False
+            )
             for b_data, full_df in zip(batch_data, self._prepped_data)
         ]
 
@@ -999,11 +1009,11 @@ class TimeSeriesTest(TimeSeriesTrain):
         batch_data = [
             b_data.append(
                 pd.concat(
-                    [b_data.iloc[-1:, :]] * (window_size - b_data.shape[0]), 
-                    ignore_index = True)
-                ) 
-            if window_size - b_data.shape[0] > 0 
-            else b_data 
+                    [b_data.iloc[-1:, :]] * (window_size - b_data.shape[0]),
+                    ignore_index=True)
+            )
+            if window_size - b_data.shape[0] > 0
+            else b_data
             for b_data in batch_data
         ]
 
@@ -1014,21 +1024,22 @@ class TimeSeriesTest(TimeSeriesTrain):
         drop_list = [i for i in batch_df.columns if i in [self._grouping_name, self._time_name, 'target']]
         x_cont = batch_df.drop(drop_list, 1).values.reshape(len(batch_data), window_size, -1)
         x_cat = batch_df[self._grouping_name].values.reshape(len(batch_data), window_size)
-        x_cat_key = tf.constant(x_cat[:,:1], dtype = tf.int32)
-      
+        x_cat_key = tf.constant(x_cat[:, :1], dtype=tf.int32)
+
         # pad data to batch size if necessary 
         if len(batch_data) < batch_size:
-            x_cont = np.append(x_cont, [x_cont[0]] * (batch_size - len(batch_data)), axis = 0)
-            x_cat = np.append(x_cat, [x_cat[0]] * (batch_size - len(batch_data)), axis = 0) 
-        x_cont = tf.Variable(x_cont, dtype = tf.float32)
-        x_cat = tf.constant(x_cat, dtype = tf.float32)
-        
-        return ([x_cont, x_cat], 
-                x_cat_key,
-                self._batch_idx - self._train_batch_ct, 
-                self._iterations) 
+            x_cont = np.append(x_cont, [x_cont[0]] * (batch_size - len(batch_data)), axis=0)
+            x_cat = np.append(x_cat, [x_cat[0]] * (batch_size - len(batch_data)), axis=0)
+        x_cont = tf.Variable(x_cont, dtype=tf.float32)
+        x_cat = tf.constant(x_cat, dtype=tf.float32)
 
-    ## inference objects
+        return ([x_cont, x_cat],
+                x_cat_key,
+                self._batch_idx - self._train_batch_ct,
+                self._iterations)
+
+        ## inference objects
+
     @property
     def horizon(self):
         return self._horizon
@@ -1041,7 +1052,7 @@ class TimeSeriesTest(TimeSeriesTrain):
     @property
     def batch_idx(self):
         return self._batch_idx
-    
+
     @batch_idx.setter
     def batch_idx(self, value):
         self._batch_idx = value
@@ -1049,7 +1060,7 @@ class TimeSeriesTest(TimeSeriesTrain):
     @property
     def iterations(self):
         return self._iterations
-    
+
     @iterations.setter
     def iterations(self, value):
         self._iterations = value
@@ -1057,21 +1068,20 @@ class TimeSeriesTest(TimeSeriesTrain):
     @property
     def batch_test_data_prepared(self):
         return self._batch_test_data_prepared
-    
+
     @batch_test_data_prepared.setter
     def batch_test_data_prepared(self, value):
         self._batch_test_data_prepared = value
 
 
 def train_ts_generator(
-    model: Model, 
-    ts_obj: TimeSeriesTrain, 
-    batch_size: int, 
-    window_size: int, 
-    verbose: bool = False, 
-    val_set: bool = False
+        model: Model,
+        ts_obj: TimeSeriesTrain,
+        batch_size: int,
+        window_size: int,
+        verbose: bool = False,
+        val_set: bool = False
 ) -> typing.Tuple[typing.List[tf.Tensor], tf.Tensor, tf.Tensor]:
-
     """ This is a util generator function for a TimeSeriesTrain object
 
         Arguments:
@@ -1095,21 +1105,21 @@ def train_ts_generator(
     """
 
     while 1:
-        yield ts_obj.next_batch(model, 
-                batch_size, 
-                window_size, 
-                verbose = verbose, 
-                val_set = val_set)
+        yield ts_obj.next_batch(model,
+                                batch_size,
+                                window_size,
+                                verbose=verbose,
+                                val_set=val_set)
+
 
 def test_ts_generator(
-    model: Model, 
-    ts_obj: TimeSeriesTest, 
-    batch_size: int, 
-    window_size: int, 
-    include_all_training: bool = False, 
-    verbose: bool = False
+        model: Model,
+        ts_obj: TimeSeriesTest,
+        batch_size: int,
+        window_size: int,
+        include_all_training: bool = False,
+        verbose: bool = False
 ) -> typing.Tuple[typing.List[tf.Tensor], tf.Tensor, int, int]:
-
     """ This is a util generator function for a TimeSeriesTest object
 
         Arguments:
@@ -1131,13 +1141,10 @@ def test_ts_generator(
             prediction_horizon_index, 
             iteration_index
     """
-    
+
     while 1:
-        yield ts_obj.next_batch(model, 
-            batch_size, 
-            window_size, 
-            include_all_training = include_all_training,
-            verbose = verbose)
-
-
-
+        yield ts_obj.next_batch(model,
+                                batch_size,
+                                window_size,
+                                include_all_training=include_all_training,
+                                verbose=verbose)
