@@ -70,6 +70,7 @@ class TimeSeriesTrain(Dataset):
         else:
             self._grouping_name = col_names[grouping_idx]
             self._grouping_idx = grouping_idx
+        self._data[self.grouping_name] = self._data[self._grouping_name].astype(str)
         self._timestamp_idx = timestamp_idx
         self._count_data = count_data
         self._freq = freq
@@ -93,10 +94,10 @@ class TimeSeriesTrain(Dataset):
 
         # augment dataset with covariates
         self._time_name = self._sort_by_timestamp(col_names)
-        self._data = self._datetime_interpolation(self._data,
-                                                  self._data[self._time_name].iloc[-1],
-                                                  negative_offset=self._negative_obs
-                                                  )
+        # self._data = self._datetime_interpolation(self._data,
+        #                                           self._data[self._time_name].iloc[-1],
+        #                                           negative_offset=self._negative_obs
+        #                                           )
         self._data = self._datetime_augmentation(self._data)
         self._age_augmentation()
 
@@ -111,14 +112,15 @@ class TimeSeriesTrain(Dataset):
         self._label_encoder.fit(cat_names)
         self._data[self._grouping_name] = self._label_encoder.transform(self._data[self._grouping_name])
 
+        # self._label_encoder.fit_transform(self._data[self._grouping_name])
         # split into train + validation sets, create sampling dist.
         self._train_val_split(val_split)
         self._store_target_means(val_split)
-
-        # standardize
+        #
+        # # standardize
         self._standardize(val_split)
-
-        # store number of features and categorical count and target means
+        #
+        # # store number of features and categorical count and target means
         self._features = self._data.shape[1] - 2  # -3 :target, grouping name, datetime, +1 :prev target
         self._count_data = count_data
 
