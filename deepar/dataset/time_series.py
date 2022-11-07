@@ -753,7 +753,7 @@ class TimeSeriesTest(TimeSeriesTrain):
         self._scaler = train_ts_obj.scaler
         self._normalize_dates = train_ts_obj.normalize_dates
         self._missing_tgt_vals = train_ts_obj.missing_tgt_vals
-        self._data[self.grouping_name] = self._data[self._grouping_name].astype(str)
+
         import pdb
         # preprocess new test data if it exists
         if self._data is not None:
@@ -777,7 +777,7 @@ class TimeSeriesTest(TimeSeriesTrain):
         col_names = list(self._data)
         if self._grouping_name == 'category':
             self._data['category'] = 'dummy_cat'
-
+        self._data[self.grouping_name] = self._data[self._grouping_name].astype(str)
         # delete target column if one exists (not needed for test)
         if target_idx is not None:
             self._data = self._data.drop(col_names[target_idx], axis=1)
@@ -1011,11 +1011,13 @@ class TimeSeriesTest(TimeSeriesTrain):
             batch_start_idx = self._train_batch_ct * window_size + self._batch_idx - self._train_batch_ct
         else:
             batch_start_idx = self._batch_idx * window_size
+        # print(type(self._prepped_data))
         batch_data = [
             df.iloc[batch_start_idx:batch_start_idx + window_size, :]
             for df in self._prepped_data[df_start_idx:df_stop_idx]
         ]
-
+        import pdb
+        # pdb.set_trace()
         # sample missing 'targets' from current model parameters (for 'prev_targets')
         batch_data = [
             self._sample_missing_prev_tgts(
