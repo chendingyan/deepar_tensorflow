@@ -214,6 +214,7 @@ class DeepARLearner:
     ) -> typing.Tuple[tf.Tensor, int]:
         """ 
         util function
+        输入train_gen, val_gen，然后进行训练
             iterates over batches, updates gradients, records metrics, writes to tb, checkpoints, early stopping
         """
 
@@ -252,6 +253,8 @@ class DeepARLearner:
 
                     mu, scale = unscale(mu, scale, cat_labels, self._lookup_table)
                     loss_value = self._loss_fn(y_batch_train, (mu, scale))
+                    import pdb
+                    # pdb.set_trace()
 
                 # sgd
                 if self._tb:

@@ -98,6 +98,7 @@ class TimeSeriesTrain(Dataset):
         #                                           self._data[self._time_name].iloc[-1],
         #                                           negative_offset=self._negative_obs
         #                                           )
+        # 为什么需要一个dummy_test_category
         self._data = self._datetime_augmentation(self._data)
         self._age_augmentation()
 
@@ -114,6 +115,7 @@ class TimeSeriesTrain(Dataset):
 
         # self._label_encoder.fit_transform(self._data[self._grouping_name])
         # split into train + validation sets, create sampling dist.
+        # 根据比例分一下train valid 但是是按照时间顺序排序区分的
         self._train_val_split(val_split)
         self._store_target_means(val_split)
         #
@@ -214,6 +216,7 @@ class TimeSeriesTrain(Dataset):
     def _age_augmentation(self):
         """
         util function
+        增加该时间序列这个时间点距离初始时间过去了 多久
             augment dataset with age covariate
         """
 
@@ -229,6 +232,7 @@ class TimeSeriesTrain(Dataset):
 
         """
         util function
+        增加日期相关的covariates
             augment dataset with datetime covariates
         """
 
@@ -290,6 +294,7 @@ class TimeSeriesTrain(Dataset):
         """
 
         # store target means over training set
+        # self._target_means代表每个group下的目标值的平均值+1
         self._target_means = 1 + self._train_data.groupby(self._grouping_name)['target'].agg('mean')
         target_mean = self._train_data['target'].dropna().mean()
 
@@ -299,6 +304,7 @@ class TimeSeriesTrain(Dataset):
         # add 'dummy_test_category' as key to target means
         self._target_means[self._label_encoder.transform(['dummy_test_category'])[0]] = target_mean
 
+        # 如果在Validation中的groupby value 在训练集中不存在，使用训练集drop na后的mean填充
         if val_split != 0:
             # if group in val doesn't exist in train, standardize by overall mean
             for group in self._val_data[self._grouping_name].unique():
@@ -367,11 +373,11 @@ class TimeSeriesTrain(Dataset):
         """
 
         # TODO CHECK THAT THIS INTERPOLATES ONE HOTS CORRECTLY
-        padding_df = self._datetime_interpolation(pandas_df,
-                                                  pandas_df[self._time_name].iloc[-1],
-                                                  negative_offset=desired_len - pandas_df.shape[0]
-                                                  )
-        padding_df = self._datetime_augmentation(padding_df)
+        # padding_df = self._datetime_interpolation(pandas_df,
+        #                                           pandas_df[self._time_name].iloc[-1],
+        #                                           negative_offset=desired_len - pandas_df.shape[0]
+        #                                           )
+        padding_df = self._datetime_augmentation(pandas_df)
 
         # standardize ONLY datetime covariates N(0,1) others interpolated and thus already standardized
         covariate_names = ['target', 'prev_target', self._grouping_name, self._time_name]
@@ -558,6 +564,9 @@ class TimeSeriesTrain(Dataset):
         # Generate sampling of time series according to prob dist. defined by scale factors
         if val_set:
             assert self._val_data is not None, "Asking for validation batch, but validation split was 0 in object construction"
+            # 一个batch里 随机取groupby列（categorical）的unique值，
+            # 所以其实并不是每个category 变量都会被选到的，其实是随机出来的
+            # 然后对于每个category的子集，某个值下的子数据集，再构建batch
             cat_samples = np.random.choice(self._val_data[self._grouping_name].unique(), batch_size)
             data = self._val_data
         else:
@@ -567,7 +576,7 @@ class TimeSeriesTrain(Dataset):
 
         sampled = []
         for cat in cat_samples:
-
+            # 对每个随机取到的unique值，找到对应的子数据集，然后增加prev_target_col这个选项
             cat_data = data[data[self._grouping_name] == cat]
 
             # add 'prev_target' column for this category
@@ -575,6 +584,7 @@ class TimeSeriesTrain(Dataset):
                 cat_data = self._add_prev_target_col(cat_data, self._target_means,
                                                      self._train_data[self._train_data[self._grouping_name] == cat])
             else:
+                import pdb
                 cat_data = self._add_prev_target_col(cat_data, self._target_means)
             cat_data.loc[:, 'target'] = cat_data['target'].fillna(self._mask_value)
 
@@ -596,7 +606,8 @@ class TimeSeriesTrain(Dataset):
 
             sampled.append(sampled_cat_data)
         data = pd.concat(sampled)
-
+        # window_size默认是20  batch_size是16
+        # cont_inputs 就是会加上时间相关的，比如在案例里是10个 就是 [16， 20， 10]的大小
         cont_inputs = tf.constant(
             data.drop(
                 ['target', self._grouping_name, self._time_name],
@@ -616,7 +627,8 @@ class TimeSeriesTrain(Dataset):
             data['target'].values.reshape(batch_size, window_size, 1),
             dtype=tf.float32
         )
-
+        import pdb
+        # pdb.set_trace()
         return [cont_inputs, cat_inputs], cat_labels, targets
 
     ## names and indices
@@ -741,11 +753,13 @@ class TimeSeriesTest(TimeSeriesTrain):
         self._scaler = train_ts_obj.scaler
         self._normalize_dates = train_ts_obj.normalize_dates
         self._missing_tgt_vals = train_ts_obj.missing_tgt_vals
-
+        self._data[self.grouping_name] = self._data[self._grouping_name].astype(str)
+        import pdb
         # preprocess new test data if it exists
         if self._data is not None:
             self._preprocess_new_test_data(target_idx, train_ts_obj)
         else:
+            # unique_cats是训练集的category列里unique value, 现在是test_groups
             self._test_groups = train_ts_obj.unique_cats
             self._new_test_groups = []
             self._horizon = 0
@@ -788,12 +802,12 @@ class TimeSeriesTest(TimeSeriesTrain):
             if group not in train_ts_obj.unique_cats:
                 train_ts_obj.train_set_ages[group] = 0
                 self._new_test_groups.append(group)
-
-        # datetime features   
+        import pdb
+        # datetime features
         max_date = self._data.groupby(self._grouping_name)[self._time_name].agg('max').max()
         min_date_test = self._train_ts_obj._data[self._time_name].max() + robust_timedelta(1, self._freq)
 
-        self._data = self._datetime_interpolation(self._data, max_date, min_date=min_date_test)
+        # self._data = self._datetime_interpolation(self._data, max_date, min_date=min_date_test)
         self._data = self._datetime_augmentation(self._data)
         self._age_augmentation(train_ts_obj.train_set_ages)
 
@@ -887,19 +901,25 @@ class TimeSeriesTest(TimeSeriesTrain):
         self._iterations = 0
 
         data = []
-        for cat in self._test_groups:
+        padding_value = 0
 
+        for cat in self._test_groups:
+            import pdb
             # series category doesn't exist in training set
-            if cat in self._new_test_groups:
+            enc_cat = self._train_ts_obj.label_encoder.transform([cat])[0]
+            if enc_cat in self._new_test_groups:
+                print('this way')
+                print(self._test_groups)
+                print(self._new_test_groups)
                 train_data = pd.DataFrame(
-                    {col: self._train_ts_obj.padding_value for col in self._data.columns},
+                    {col: padding_value for col in self._data.columns},
                     index=[i for i in range(max_train_age)]
                 )
                 train_data = self._add_prev_target_col(train_data, self._train_ts_obj.target_means)
 
             else:
                 st = time.time()
-                enc_cat = self._train_ts_obj.label_encoder.transform([cat])[0]
+                # enc_cat = self._train_ts_obj.label_encoder.transform([cat])[0]
                 train_data = self._train_ts_obj._data[self._train_ts_obj._data[self._grouping_name] == enc_cat]
 
                 # add 'prev_target' column for this series
@@ -926,10 +946,12 @@ class TimeSeriesTest(TimeSeriesTrain):
                 )
 
                 # append test data, drop 'target' col from training data
+                # import pdb
+                # pdb.set_trace()
                 prepped_data = pd.concat(
                     [train_data.drop('target', axis=1), test_data]
                 ).reset_index(drop=True)
-
+                # prepped_data = test_data
             else:
                 prepped_data = train_data
             data.append(prepped_data)
